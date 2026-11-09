@@ -10,6 +10,8 @@
   var CODE_PATTERN = /^(?:[0-9]{9}|[0-9A-Z]{12})$/;
   var CODE = CODE_PATTERN.test(hash) ? hash : '';
   var MAX_FILE = 50 * 1024 * 1024;
+  // Az USB-s út addig rejtett, amíg nincs letölthető kiolvasó program (config.js: USB_TOOL_URL). A ?usb a címben kipróbáláshoz bekapcsolja.
+  var USB_ENABLED = !!window.USB_TOOL_URL || /[?&]usb(=|&|$)/.test(location.search);
 
   // Csak olvas, nem ír, nem csatlakozik a hálózatra. A profiles kimenetéből csak a két igen/nem sor jön át,
   // mert a teljes kimenet a felügyeleti szerver címét is tartalmazhatja.
@@ -170,7 +172,8 @@
 
   function collect() {
     var v = state.vals, p = state.parsed, e = state.extra;
-    var origin = state.route === 'file' ? (current().paste ? 'naplóból' : 'fájlból') : (state.route === 'command' ? 'parancsból' : 'beírta');
+    var origin = state.route === 'file' ? (current().paste ? 'naplóból' : 'fájlból')
+      : (state.route === 'command' ? 'parancsból' : (state.route === 'usb' ? 'USB-ből' : 'beírta'));
     function src(key) {
       if (v[key] === '' || v[key] === null) return '';
       return p[key] !== undefined && String(p[key]) === String(v[key]) ? origin : 'beírta';
@@ -190,7 +193,7 @@
         model: src('model'), chip: src('chip'), memory: src('memory'), storage: src('storage'),
         os: (v.os && v.os === state.detectedOs) ? 'böngészőből' : src('os'),
         serial: src('serial'), cycles: src('cycles'), capacity: src('capacity'),
-        condition: e.condition ? 'parancsból' : '', activationLock: e.activationLock ? 'parancsból' : '',
+        condition: e.condition ? 'parancsból' : '', activationLock: e.activationLock ? (state.route === 'usb' ? 'USB-ből' : 'parancsból') : '',
         mdm: (e.dep !== null || e.mdm !== null) ? 'parancsból' : ''
       }
     };
@@ -322,13 +325,66 @@
       '<div id="fileResult"></div>';
   }
 
+  function usbSteps() {
+    var link = window.USB_TOOL_URL
+      ? '<a href="' + esc(window.USB_TOOL_URL) + '" target="_blank" rel="noopener">a kiolvasó program letöltése</a>'
+      : 'a kiolvasó program (a letöltési linket a vásárló küldi)';
+    return '<h2>Az akkumulátor adatai USB-vel</h2>' +
+      '<p>A kiolvasó program csak olvas, nem csatlakozik az internetre, és semmit nem küld el. Az eredményt te másolod ide, és az előnézetben látod, mi megy tovább.</p>' +
+      '<ol class="steps">' +
+        '<li>Töltsd le a számítógépedre: ' + link + '. Windowson az Apple USB-illesztőprogramja is kell (iTunes vagy Apple Devices alkalmazás), Macen nem.</li>' +
+        '<li>Kösd az eszközt USB-kábellel a számítógéphez, oldd fel, és ha megkérdezi, koppints a <b>Megbízom</b> gombra.</li>' +
+        '<li>Futtasd a programot. Pár másodperc múlva kiír egy rövid szöveget, ami <b>IPAD-AUDIT-USB</b> sorral kezdődik és <b>END</b> sorral végződik. Másold ki az egészet.</li>' +
+        '<li>Illeszd be ide, és koppints a Beolvasás gombra:' +
+          '<label class="field"><textarea id="usb-paste" placeholder="Ide illeszd be a program kimenetét" spellcheck="false"></textarea></label>' +
+          '<button type="button" class="btn small" id="parse-usb">Beolvasás</button></li>' +
+      '</ol>' +
+      '<div class="note">A beillesztett szöveget a beolvasás után töröljük a mezőből. Csak a modellt, a rendszerverziót, a tárhelyet, a sorozatszámot, az akkumulátor adatait és az Aktiválási zár állapotát vesszük ki belőle.</div>' +
+      '<div id="fileResult"></div>';
+  }
+
+  function applyUsbText(text) {
+    var r = P.parseUsbOutput(String(text));
+    if (!r.valid) {
+      message('fileResult', '<div class="error">Ebben a szövegben nem találtuk a program kimenetét. Ellenőrizd, hogy az <b>IPAD-AUDIT-USB</b> sortól az <b>END</b> sorig mindent bemásoltál-e, vagy futtasd újra a programot.</div>');
+      return;
+    }
+    state.parsed = {};
+    state.noLog = false;
+    function put(key, value) {
+      if (value === '' || value === null || value === undefined) return;
+      state.parsed[key] = String(value); state.vals[key] = String(value);
+    }
+    put('cycles', r.cycles); put('capacity', r.capacity); put('os', r.os); put('serial', r.serial);
+    put('storage', r.storage); put('model', r.modelName || r.model);
+    state.extra.activationLock = r.activationLock;
+    state.extra.modelId = r.modelName ? r.model : '';
+    save();
+    if ($('cycles')) $('cycles').value = state.vals.cycles;
+    if ($('capacity')) $('capacity').value = state.vals.capacity;
+    var lock = r.activationLock === 'Enabled' ? 'bekapcsolva' : (r.activationLock === 'Disabled' ? 'kikapcsolva' : 'nem olvasható ki');
+    message('fileResult', '<div class="result"><dl>' +
+      '<dt>Modell</dt><dd>' + esc(r.modelName ? r.modelName + ' (' + r.model + ')' : (r.model || 'nem található')) + '</dd>' +
+      '<dt>Rendszer</dt><dd>' + esc(r.os || 'nem található') + '</dd>' +
+      '<dt>Ciklusszám</dt><dd>' + esc(r.cycles === null ? 'nem található' : r.cycles) + '</dd>' +
+      '<dt>Maximális kapacitás</dt><dd>' + esc(r.capacity === null ? 'nem található' : r.capacity + '%') + '</dd>' +
+      '<dt>Aktiválási zár</dt><dd>' + esc(lock) + '</dd>' +
+      '</dl></div><div class="success">Kész. A szöveget töröltük a mezőből. Az értékeket lent javíthatod.</div>');
+  }
+
   function dataIos() {
     var s = current();
-    var r = s.batteryScreen ? state.route : (state.route = 'file');
+    var r = state.route;
+    if (!s.batteryScreen && r !== 'usb') r = state.route = 'file';
     var html = top() + progress(2) +
       '<h1>Az akkumulátor állapota</h1>' +
       '<p class="lead">Két számot keresünk: a <b>ciklusszámot</b> (hányszor töltötték fel teljesen) és a <b>maximális kapacitást</b> (az eredeti kapacitás hány százalékát tudja még tárolni).</p>' +
       osSelect();
+    if (USB_ENABLED) {
+      html += '<h2>Van számítógéped?</h2>' +
+        '<p>Ha igen, egy kis programmal USB-kábelen át kiolvashatjuk az akku adatát. Ez a legpontosabb, és minden eszközön működik.</p>' +
+        choice('r-usb', 'Igen, USB-vel olvasom ki', 'Letöltesz egy kis programot, és a kimenetét bemásolod ide.', r === 'usb');
+    }
     if (s.batteryScreen) {
       html += '<h2>Látod az akku állapotát a Beállításokban?</h2>' +
         '<p>Nyisd meg: <b>Beállítások &gt; Akkumulátor &gt; Akkumulátor állapota</b>. Nem minden iPad és iPhone mutatja ezt.</p>' +
@@ -337,13 +393,20 @@
     } else {
       html += '<div class="note">Ezen a rendszerverzión a Beállítások nem mutatja az akkumulátor állapotát. Az eszköz egy rendszernaplóból adja meg a ciklusszámot, ehhez végigvezetünk.</div>';
     }
-    if (r === 'file') html += s.paste ? pasteSteps(s) : fileSteps(s);
+    if (r === 'usb') html += usbSteps();
+    else if (r === 'file') html += s.paste ? pasteSteps(s) : fileSteps(s);
     if (r) html += batteryFields();
     html += nav('back', r ? 'next' : '', 'Tovább');
     if (r) html += '<p><button type="button" class="link" id="skip">Ezt most kihagyom</button></p>';
     show(html);
     on('r-screen', function () { state.route = 'screen'; dataIos(); });
     on('r-file', function () { state.route = 'file'; dataIos(); });
+    on('r-usb', function () { state.route = 'usb'; dataIos(); });
+    on('parse-usb', function () {
+      var area = $('usb-paste');
+      applyUsbText(area ? area.value : '');
+      if (area) area.value = '';
+    });
     on('back', kind);
     on('next', batteryNext);
     on('skip', function () { state.vals.cycles = ''; state.vals.capacity = ''; details(); });

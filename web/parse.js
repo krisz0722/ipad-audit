@@ -191,10 +191,13 @@
         d.activationLock === 'Enabled' ? 'bad' : 'ok', src.activationLock));
       var mdm = d.dep === null && d.mdm === null ? '' : ((d.dep || d.mdm) ? 'van' : 'nincs');
       locks.push(row('Céges felügyelet (MDM)', mdm, mdm === 'van' ? 'bad' : 'ok', src.mdm));
+    } else if (d.activationLock) {
+      locks.push(row('Aktiválási zár', d.activationLock === 'Enabled' ? 'bekapcsolva' : 'kikapcsolva',
+        d.activationLock === 'Enabled' ? 'bad' : 'ok', src.activationLock));
     }
 
     // Összegzés a vevőnek: melyik adat olvasható ki a rendszerből, és melyik az eladó szava.
-    var systemSource = { 'fájlból': true, 'naplóból': true, 'parancsból': true };
+    var systemSource = { 'fájlból': true, 'naplóból': true, 'parancsból': true, 'USB-ből': true };
     var summary = [];
     var batterySources = [];
     if (d.cycles !== null) batterySources.push(src.cycles);
@@ -213,8 +216,8 @@
     } else {
       summary.push(row('Modell', 'nincs sorozatszám, a modell nem ellenőrizhető', 'warn', ''));
     }
-    if (d.kind === 'mac' && d.activationLock) {
-      summary.push(row('Aktiválási zár', d.activationLock === 'Enabled' ? 'BEKAPCSOLVA, az új tulajdonos nem tudja használni' : 'kikapcsolva, a gépből kiolvasva',
+    if (d.activationLock) {
+      summary.push(row('Aktiválási zár', d.activationLock === 'Enabled' ? 'BEKAPCSOLVA, az új tulajdonos nem tudja használni' : 'kikapcsolva, az eszközből kiolvasva',
         d.activationLock === 'Enabled' ? 'bad' : 'ok', ''));
     } else {
       summary.push(row('Apple-fiók zár',
@@ -234,6 +237,32 @@
         row('Forrás', 'Az eladó a saját eszközén gyűjtötte egy böngészős varázslóval. Az összegzés mutatja, melyik adat olvasható ki a rendszerből, és melyik az eladó bevallása.', 'info', '')
       ] }
     ];
+  }
+
+  // Az USB-s kiolvasó (tool/ipad_audit/reader.py) blokkja. Csak a felsorolt mezőket veszi át, érvényes értékkel.
+  function parseUsbOutput(text) {
+    text = String(text || '');
+    var out = { valid: false, model: '', modelName: '', os: '', serial: '', storage: '', cycles: null, capacity: null, activationLock: '' };
+    var start = text.indexOf('IPAD-AUDIT-USB 1');
+    if (start < 0) return out;
+    var end = text.indexOf('\nEND', start);
+    var block = text.slice(start, end < 0 ? text.length : end);
+    var f = Object.create(null), m, re = /^([a-z_]{1,24}):[ \t]*(.{1,60})$/gm;
+    while ((m = re.exec(block)) !== null) { if (!(m[1] in f)) f[m[1]] = m[2].replace(/\s+$/, ''); }
+
+    out.model = clean(f.model, 20);
+    out.modelName = clean(f.model_name, 40);
+    out.os = /^\d{1,2}(\.\d{1,2}){0,2}$/.test(f.os || '') ? f.os : '';
+    out.serial = normalizeSerial(f.serial);
+    var gb = parseInt(f.storage_gb, 10);
+    if (gb > 0 && gb <= 16000) out.storage = gb >= 1000 ? (gb / 1000) + ' TB' : gb + ' GB';
+    var cycles = parseInt(f.cycles, 10);
+    if (cycles >= 0 && cycles <= 5000) out.cycles = cycles;
+    var cap = parseFloat(f.capacity_percent);
+    if (cap >= 40 && cap <= 110) out.capacity = Math.round(Math.min(cap, 100));
+    out.activationLock = { on: 'Enabled', off: 'Disabled' }[f.activation_lock] || '';
+    out.valid = !!(out.model || out.os || out.cycles !== null || out.serial);
+    return out;
   }
 
   // A böngésző azonosítójából felismeri az iOS/iPadOS verziót. Az iPadOS 13 felett az iPad
@@ -261,6 +290,6 @@
 
   return {
     sha256Hex: sha256Hex, fingerprint: fingerprint, normalizeSerial: normalizeSerial, storageLabel: storageLabel,
-    parseIpadFile: parseIpadFile, parseMacOutput: parseMacOutput, buildSections: buildSections, detectOs: detectOs
+    parseIpadFile: parseIpadFile, parseMacOutput: parseMacOutput, parseUsbOutput: parseUsbOutput, buildSections: buildSections, detectOs: detectOs
   };
 });

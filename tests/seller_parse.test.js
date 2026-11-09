@@ -223,3 +223,54 @@ test('sorozatszám sorok: megosztáskor a nyers érték, különben lenyomat és
   assert.ok(hidden.includes('Sorozatszám vége'));
   assert.ok(!hidden.includes('Sorozatszám'));
 });
+
+const USB_SAMPLE = [
+  'iPad akku-kiolvasó. Csak olvas, semmit nem küld el.',
+  'IPAD-AUDIT-USB 1',
+  'model: iPad2,5',
+  'model_name: iPad mini 1',
+  'os: 9.3.5',
+  'serial: DMPS00000FAK',
+  'storage_gb: 16',
+  'cycles: 244',
+  'design_capacity: 4490',
+  'max_capacity: 3802',
+  'capacity_percent: 84.7',
+  'activation_lock: off',
+  'END',
+  'UniqueDeviceID: a1b2c3d4e5f60718293a4b5c6d7e8f9012345678'
+].join('\n');
+
+test('parseUsbOutput kiolvassa a blokkot és a körülötte lévő szöveget figyelmen kívül hagyja', () => {
+  const r = P.parseUsbOutput(USB_SAMPLE);
+  assert.strictEqual(r.valid, true);
+  assert.strictEqual(r.model, 'iPad2,5');
+  assert.strictEqual(r.modelName, 'iPad mini 1');
+  assert.strictEqual(r.os, '9.3.5');
+  assert.strictEqual(r.serial, 'DMPS00000FAK');
+  assert.strictEqual(r.storage, '16 GB');
+  assert.strictEqual(r.cycles, 244);
+  assert.strictEqual(r.capacity, 85);
+  assert.strictEqual(r.activationLock, 'Disabled');
+  assert.ok(!JSON.stringify(r).includes('a1b2c3d4'));
+});
+
+test('parseUsbOutput érvénytelen vagy üres szövegre nem valid, hibás értéket eldob', () => {
+  assert.strictEqual(P.parseUsbOutput('hello').valid, false);
+  assert.strictEqual(P.parseUsbOutput('').valid, false);
+  const bad = P.parseUsbOutput('IPAD-AUDIT-USB 1\ncycles: 99999\ncapacity_percent: 5\nos: <script>\nEND');
+  assert.strictEqual(bad.cycles, null);
+  assert.strictEqual(bad.capacity, null);
+  assert.strictEqual(bad.os, '');
+});
+
+test('USB-ből jövő adat: az akku ok, az iPad zárja is megjelenik', () => {
+  const data = sampleData({ kind: 'ios', activationLock: 'Disabled', sources: { cycles: 'USB-ből', capacity: 'USB-ből', activationLock: 'USB-ből' } });
+  const sections = P.buildSections(data);
+  assert.strictEqual(section(sections, 'Összegzés a vevőnek').rows[0].status, 'ok');
+  const lock = section(sections, 'Zárak és felügyelet').rows.find((r) => r.label === 'Aktiválási zár');
+  assert.strictEqual(lock.status, 'ok');
+  assert.strictEqual(lock.tag, 'USB-ből');
+  const summaryLock = section(sections, 'Összegzés a vevőnek').rows.find((r) => r.label === 'Aktiválási zár');
+  assert.match(summaryLock.value, /az eszközből kiolvasva/);
+});
