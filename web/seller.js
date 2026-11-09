@@ -80,7 +80,15 @@
     var node = $(id);
     if (node) node.addEventListener('input', function () { state.vals[key] = this.value; });
   }
-  function message(id, html) { var node = $(id); if (node) node.innerHTML = html; }
+  // Az üzenetet a képernyőre görgeti, ha az a látható rész alatt vagy felett jelent meg. Enélkül egy hosszú oldalon "nem történik semmi".
+  function message(id, html) {
+    var node = $(id);
+    if (!node) return;
+    node.innerHTML = html;
+    if (!html || !node.scrollIntoView) return;
+    var box = node.getBoundingClientRect();
+    if (box.bottom > window.innerHeight || box.top < 0) node.scrollIntoView(false);
+  }
   function copyText(text, done) {
     function fallback() {
       var area = document.createElement('textarea');
@@ -302,7 +310,7 @@
       '<p>Az eszköz a ciklusszámot egy diagnosztikai naplóban tárolja. Ezt a naplót másolod ide, az oldal csak ezen az eszközön olvassa ki belőle a ciklusszámot és a kapacitást. Csak akkor folytasd, ha az eszközön már van ilyen napló. Ha nincs, ne kapcsolj be semmit: jelezd lent, és az akkumulátor adatát USB-kábellel, egy számítógépen futó kis programmal olvassuk ki.</p>' +
       '<ol class="steps">' +
         '<li>Nyisd meg: ' + s.path + '.</li>' +
-        '<li>' + s.list + '<br><button type="button" class="link" id="no-log">Nincs ilyen bejegyzés</button></li>' +
+        '<li>' + s.list + '<br><button type="button" class="link" id="no-log">Nincs ilyen bejegyzés</button><div id="nolog-msg"></div></li>' +
         '<li>Érintsd meg hosszan a szöveget, válaszd a <b>Mindet kijelöl</b> (Select All), majd a <b>Másolás</b> (Copy) lehetőséget.</li>' +
         '<li>Térj vissza ide, érintsd meg hosszan az alábbi mezőt, válaszd a <b>Beillesztés</b> (Paste) lehetőséget, majd koppints a Beolvasás gombra:' +
           '<label class="field"><textarea id="paste" placeholder="Ide illeszd be a napló szövegét" spellcheck="false"></textarea></label>' +
@@ -317,7 +325,7 @@
       '<p>Az eszköz a ciklusszámot egy analitikai fájlban tárolja. Ezt a fájlt választod ki az oldalon. Az oldal csak ezen az eszközön olvassa, nem tölti fel. Csak akkor folytasd, ha az eszközön már van ilyen fájl. Ha nincs, ne kapcsolj be semmit: jelezd lent, és az akkumulátor adatát USB-kábellel, egy számítógépen futó kis programmal olvassuk ki.</p>' +
       '<ol class="steps">' +
         '<li>Nyisd meg: ' + s.path + '.</li>' +
-        '<li>' + s.list + '<br><button type="button" class="link" id="no-log">Nincs ilyen bejegyzés</button></li>' +
+        '<li>' + s.list + '<br><button type="button" class="link" id="no-log">Nincs ilyen bejegyzés</button><div id="nolog-msg"></div></li>' +
         '<li>Nyisd meg, koppints a <b>Megosztás</b> gombra, majd a <b>Mentés a Fájlokba</b> pontra.</li>' +
         '<li>Térj vissza ide, és válaszd ki a mentett fájlt:<br><input type="file" id="file"></li>' +
       '</ol>' +
@@ -426,7 +434,7 @@
       save();
       if ($('cycles')) $('cycles').value = '';
       if ($('capacity')) $('capacity').value = '';
-      message('fileResult', '<div class="note">Rendben, nem kell semmit bekapcsolnod. Ennél az eszköznél az akkumulátor adatát egy USB-kábellel a számítógépre kötött kis program tudja kiolvasni. Ehhez a vevő külön útmutatót ad. A többi adatot addig is kitöltheted.</div>' +
+      message('nolog-msg', '<div class="note">Rendben, nem kell semmit bekapcsolnod. Ennél az eszköznél az akkumulátor adatát egy USB-kábellel a számítógépre kötött kis program tudja kiolvasni. Ehhez a vevő külön útmutatót ad. A többi adatot addig is kitöltheted.</div>' +
         '<button type="button" class="btn" id="no-log-next">Tovább</button>');
       on('no-log-next', details);
     });
