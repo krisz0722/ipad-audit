@@ -9,6 +9,8 @@ var MAX_STEP_SIZE = 4000;
 var DAILY_MAILS = 20;
 var SESSION_SECONDS = 21600; // A CacheService felső korlátja.
 var COLS = { code: 1, label: 2, expires: 3, status: 4, used: 5 };
+var CODE_DIGITS = 9;
+var MAX_FAILS_PER_HOUR = 30;
 
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('iPad audit').addItem('Új meghívó', 'newInvite').addToUi();
@@ -36,14 +38,35 @@ function randomCode_(length) {
   return text;
 }
 
+// Csak számjegyekből álló kód. Az első számjegy nem 0, így a Tábla számként tárolva sem veszít belőle.
+function randomDigits_(length) {
+  var text = '';
+  while (text.length < length) {
+    var digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,
+      Utilities.getUuid() + Utilities.getUuid());
+    for (var i = 0; i < digest.length && text.length < length; i++) {
+      var b = digest[i] & 255;
+      if (b >= 250) continue;
+      var d = b % 10;
+      if (text.length === 0 && d === 0) continue;
+      text += String(d);
+    }
+  }
+  return text;
+}
+
+function groupCode_(code) {
+  return String(code).replace(/(\d{3})(?=\d)/g, '$1 ');
+}
+
 function newInvite() {
   var ui = SpreadsheetApp.getUi();
   var answer = ui.prompt('Új meghívó', 'Kinek szól? (pl. Jófogás, Air 2)', ui.ButtonSet.OK_CANCEL);
   if (answer.getSelectedButton() !== ui.Button.OK) return;
-  var code = randomCode_(12);
+  var code = randomDigits_(CODE_DIGITS);
   var expires = new Date(Date.now() + INVITE_HOURS * 3600 * 1000);
   sheet_().appendRow([code, answer.getResponseText().slice(0, 80), expires, 'új', '']);
-  ui.alert('Meghívókód', code + '\n\nEz egyszer használható, ' + INVITE_HOURS + ' óráig érvényes.', ui.ButtonSet.OK);
+  ui.alert('Meghívókód', groupCode_(code) + '\n\nEz egyszer használható, ' + INVITE_HOURS + ' óráig érvényes.', ui.ButtonSet.OK);
 }
 
 function json_(value) {
@@ -57,7 +80,7 @@ function fail_(message) {
 function findInvite_(sheet, code) {
   var values = sheet.getDataRange().getValues();
   for (var i = 1; i < values.length; i++) {
-    if (String(values[i][COLS.code - 1]) === code) return { row: i + 1, values: values[i] };
+    if (String(values[i][COLS.code - 1]).trim().toUpperCase() === code) return { row: i + 1, values: values[i] };
   }
   return null;
 }
@@ -73,12 +96,20 @@ function saveSession_(sid, session) {
 }
 
 function start_(body) {
-  var code = String(body.code || '').trim().toUpperCase();
+  var code = String(body.code || '').trim().toUpperCase().replace(/[\s-]/g, '');
+  var cache = CacheService.getScriptCache();
+  var failKey = 'fails:' + Utilities.formatDate(new Date(), 'Etc/UTC', 'yyyy-MM-dd-HH');
+  var fails = Number(cache.get(failKey) || 0);
+  if (fails >= MAX_FAILS_PER_HOUR) return fail_('Túl sok hibás próbálkozás, próbáld újra egy óra múlva.');
+  function bad(message) {
+    cache.put(failKey, String(fails + 1), 3600);
+    return fail_(message);
+  }
   var sheet = sheet_();
   var invite = findInvite_(sheet, code);
-  if (!invite) return fail_('A meghívókód nem érvényes.');
-  if (invite.values[COLS.status - 1] !== 'új') return fail_('Ezt a meghívókódot már felhasználták.');
-  if (new Date(invite.values[COLS.expires - 1]).getTime() < Date.now()) return fail_('A meghívókód lejárt.');
+  if (!invite) return bad('A meghívókód nem érvényes.');
+  if (invite.values[COLS.status - 1] !== 'új') return bad('Ezt a meghívókódot már felhasználták.');
+  if (new Date(invite.values[COLS.expires - 1]).getTime() < Date.now()) return bad('A meghívókód lejárt.');
   var sid = randomCode_(10);
   saveSession_(sid, { row: invite.row, label: invite.values[COLS.label - 1], steps: {}, mailed: false });
   sheet.getRange(invite.row, COLS.status).setValue('folyamatban');
