@@ -53,7 +53,8 @@
     vals: { model: '', storage: '', os: '', memory: '', chip: '', serial: '', cycles: '', capacity: '' },
     parsed: {},
     extra: { condition: '', fileDate: '', activationLock: '', dep: null, mdm: null, modelId: '' },
-    shareSerial: true, apple: '', sid: '', sending: false, sent: false, noLog: false, demoSections: null
+    shareSerial: true, apple: '', sid: '', sending: false, sent: false, noLog: false, demoSections: null,
+    hw: {}, hwSkipped: false
   };
 
   var SCREENS = {};
@@ -90,8 +91,8 @@
       (DEMO ? '<span class="demo">Próbaüzem: semmi nem megy el</span>' : '') + '</div>';
   }
   function progress(n) {
-    return '<div class="progress"><span style="width:' + (n * 25) + '%"></span></div>' +
-      '<p class="step-label">' + n + '. lépés a 4-ből</p>';
+    return '<div class="progress"><span style="width:' + (n * 20) + '%"></span></div>' +
+      '<p class="step-label">' + n + '. lépés az 5-ből</p>';
   }
   function choice(id, title, sub, selected) {
     return '<button type="button" class="choice' + (selected ? ' on' : '') + '" id="' + id + '"><b>' + title + '</b><span>' + sub + '</span></button>';
@@ -282,7 +283,7 @@
     }
     var serial = P.normalizeSerial(v.serial);
     return {
-      kind: state.kind,
+      kind: state.kind, hw: state.hw,
       model: clean(v.model, 60), modelId: e.modelId, chip: clean(v.chip, 60), memory: clean(v.memory, 20),
       storage: clean(v.storage, 20), os: clean(v.os, 60),
       fingerprint: P.fingerprint(CODE || 'DEMO00000000', serial),
@@ -424,7 +425,7 @@
   SCREENS.welcome = function () {
     show(top() +
       '<h1>Az eszközöd állapotának ellenőrzése</h1>' +
-      '<p class="lead">A vásárló szeretné látni az akkumulátor és az alapadatok állapotát, mielőtt megveszi az eszközt. Ez az oldal lépésről lépésre végigvezet rajta. Kb. 5 percet vesz igénybe, és nem kell semmit telepítened.</p>' +
+      '<p class="lead">A vásárló szeretné látni az akkumulátor és az alapadatok állapotát, mielőtt megveszi az eszközt. Ez az oldal lépésről lépésre végigvezet rajta. Kb. 10 percet vesz igénybe, és nem kell semmit telepítened.</p>' +
       '<h2>Miért kérjük ezt?</h2>' +
       '<p>Egy használt eszköznél az akkumulátor kopását kívülről nem lehet megítélni. Ha mindketten ugyanazokat a számokat látjuk, az átvételnél nem lesz félreértés, és ez neked is megkönnyíti az eladást.</p>' +
       '<h2>Mit olvasunk ki, és mit nem?</h2>' +
@@ -465,7 +466,7 @@
   };
 
   function pickKind(kind) {
-    if (state.kind !== kind) { state.route = ''; state.parsed = {}; }
+    if (state.kind !== kind) { state.route = ''; state.parsed = {}; state.hw = {}; state.hwSkipped = false; }
     state.kind = kind;
     if (kind === 'mac') { go('mac_run'); return; }
     if (ON_COMPUTER) { go('usb_get'); return; }
@@ -765,6 +766,319 @@
     on('to-command', function () { go('mac_run'); });
   };
 
+  /* ---- hardverteszt: az oldal maga méri, mit érzékel az eszköz ---- */
+
+  var HW_FLOW = { ios: ['touch', 'motion', 'audio', 'camera_rear', 'camera_front', 'display'], mac: ['audio', 'camera_front', 'display'] };
+  var HW_TITLES = { touch: 'Érintőképernyő', motion: 'Mozgásérzékelők', audio: 'Hangszóró és mikrofon',
+    camera_rear: 'Hátlapi kamera', camera_front: 'Előlapi kamera', display: 'Kijelző színei' };
+
+  function sleep(ms) { return new Promise(function (resolve) { setTimeout(resolve, ms); }); }
+  function hwList() { return HW_FLOW[state.kind === 'mac' ? 'mac' : 'ios']; }
+  // Számítógépről az iPad hardverét nem lehet böngészőből tesztelni.
+  function hwStart() { return (state.kind === 'ios' && ON_COMPUTER) ? 'review' : 'hw_intro'; }
+  function hwNext() {
+    var list = hwList();
+    for (var i = 0; i < list.length; i++) {
+      if (!state.hw[list[i]]) { go('hw_' + list[i]); return; }
+    }
+    go('review');
+  }
+  function hwDone(name, status, detail) { state.hw[name] = { status: status, detail: detail || '' }; save(); }
+  function hwResult(name) {
+    var r = state.hw[name];
+    var icon = r.status === 'ok' ? '✅ ' : (r.status === 'bad' ? '❌ ' : '❔ ');
+    var cls = r.status === 'ok' ? 'success' : (r.status === 'bad' ? 'error' : 'note');
+    var text = r.status === 'unavailable' ? (r.detail || 'ezen a rendszeren a böngészőből nem ellenőrizhető')
+      : (r.status === 'skipped' ? 'kihagyva' + (r.detail ? ': ' + r.detail : '') : (r.detail || (r.status === 'ok' ? 'rendben' : 'hibás')));
+    message('result', '<div class="' + cls + '">' + icon + esc(text) + '</div><button type="button" class="btn" id="hw-next">Tovább</button>');
+    on('hw-next', hwNext);
+  }
+  function hwScreen(name, lead, extra, supported, unavailableText) {
+    show(top() + progress(4) + '<h1>' + HW_TITLES[name] + '</h1><p class="lead">' + lead + '</p>' +
+      (supported ? '<button type="button" class="btn" id="hw-start">Indítás</button><p><button type="button" class="link" id="hw-skip">Kihagyom</button></p>' : '') +
+      (extra || '') + '<div id="result"></div>' + foot());
+    if (!supported) { hwDone(name, 'unavailable', unavailableText); hwResult(name); return false; }
+    on('hw-skip', function () { hwDone(name, 'skipped'); hwNext(); });
+    return true;
+  }
+
+  SCREENS.hw_intro = function () {
+    var list = hwList(), items = '';
+    for (var i = 0; i < list.length; i++) items += '<li>' + HW_TITLES[list[i]] + '</li>';
+    show(top() + progress(4) +
+      '<h1>Hardverteszt</h1>' +
+      '<p class="lead">Néhány rövid teszt, kb. 3 percig. Az oldal <b>maga méri</b>, mit érzékel az eszköz: hány mezőt érzett az érintőképernyő, mekkora mozgást mért az érzékelő, meghallotta-e a mikrofon a hangjelzést. Nem a te válaszod számít. Ami ezen a rendszeren nem mérhető, azt a riport külön jelzi.</p>' +
+      '<ul class="marks yes">' + items + '</ul>' +
+      choice('hw-go', 'Elkezdem', 'Kb. 3 perc. Ne vegyél fel hívást közben.', false) +
+      choice('hw-no', 'Kihagyom a hardvertesztet', 'A riportban "nem tesztelt" jelzést kap.', false) + foot());
+    on('hw-go', function () { state.hwSkipped = false; hwNext(); });
+    on('hw-no', function () { state.hwSkipped = true; go('review'); });
+  };
+
+  /* érintőképernyő */
+  SCREENS.hw_touch = function () {
+    if (hwScreen('touch', 'Húzd végig az ujjad a kijelzőn úgy, hogy minden mezőt érintsél, a végén pedig tegyél egyszerre két ujjat a kijelzőre. Az oldal számolja, hány mezőt érzékelt az eszköz.', '', true, '')) {
+      on('hw-start', startTouch);
+    }
+  };
+
+  function startTouch() {
+    var cols = 8, rows = 12, total = cols * rows, tracker = P.touchTracker(total), finished = false, timer;
+    var html = '<table id="touch-grid"><tbody>', index = 0;
+    for (var r = 0; r < rows; r++) {
+      html += '<tr>';
+      for (var c = 0; c < cols; c++) html += '<td data-i="' + (index++) + '"></td>';
+      html += '</tr>';
+    }
+    html += '</tbody></table><div id="touch-note">Húzd végig az ujjad minden mezőn</div><button type="button" class="btn secondary" id="touch-skip">Kihagyom</button>';
+    var overlay = document.createElement('div');
+    overlay.id = 'touch-overlay';
+    overlay.innerHTML = html;
+    document.body.appendChild(overlay);
+    function finish(status, detail) {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+      hwDone('touch', status, detail);
+      if (status === 'skipped' && !detail) { hwNext(); return; }
+      hwResult('touch');
+    }
+    function mark(event) {
+      event.preventDefault();
+      if (!event.isTrusted) return;
+      var fingers = event.touches.length;
+      tracker.hit(-1, fingers);
+      for (var t = 0; t < fingers; t++) {
+        var el = document.elementFromPoint(event.touches[t].clientX, event.touches[t].clientY);
+        var i = el && el.getAttribute ? el.getAttribute('data-i') : null;
+        if (i !== null) { el.className = 'on'; tracker.hit(parseInt(i, 10), fingers); }
+      }
+      var st = tracker.state();
+      if (st.complete) finish('ok', 'mind a ' + st.total + ' mező érzékelt, két ujjal is');
+      else if (st.cells === st.total) document.getElementById('touch-note').textContent = 'Most tegyél egyszerre két ujjat a kijelzőre';
+    }
+    overlay.addEventListener('touchstart', mark, false);
+    overlay.addEventListener('touchmove', mark, false);
+    document.getElementById('touch-skip').addEventListener('click', function () { finish('skipped'); });
+    timer = setTimeout(function () {
+      var st = tracker.state();
+      if (st.cells >= st.total * 0.6) finish('bad', st.cells + ' / ' + st.total + ' mezőt érzékelt' + (st.multi ? ', két ujjal is' : ', két ujjas érintés nélkül'));
+      else finish('skipped', 'csak ' + st.cells + ' / ' + st.total + ' mezőt érintett meg');
+    }, 180000);
+  }
+
+  /* mozgásérzékelők */
+  SCREENS.hw_motion = function () {
+    if (hwScreen('motion', 'Koppints az Indításra, majd dönts meg és fordíts el az eszközt minden irányba kb. fél percig.', '', true, '')) {
+      on('hw-start', startMotion);
+    }
+  };
+
+  function startMotion() {
+    if (!window.DeviceMotionEvent) { hwDone('motion', 'unavailable', 'a böngésző nem ad mozgásadatot'); hwResult('motion'); return; }
+    var tracker = P.motionTracker(), finished = false, timer;
+    function finish(status, detail) {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      window.removeEventListener('devicemotion', onMotion);
+      hwDone('motion', status, detail);
+      hwResult('motion');
+    }
+    function onMotion(event) {
+      tracker.feed(event.accelerationIncludingGravity, event.rotationRate);
+      var st = tracker.state();
+      if (st.complete) finish('ok', 'mért mozgás: ' + Math.round(st.rangeX) + ' és ' + Math.round(st.rangeY) + ' m/s² tartomány, ' + Math.round(st.rotation) + ' °/s forgás');
+    }
+    function begin() {
+      message('result', '<p class="muted">Mozgasd az eszközt...</p>');
+      window.addEventListener('devicemotion', onMotion);
+      timer = setTimeout(function () {
+        if (tracker.state().events === 0) finish('bad', 'nem érkezett mozgásadat az érzékelőtől');
+        else finish('skipped', 'a mozgás nem érte el a küszöböt');
+      }, 40000);
+    }
+    if (window.DeviceMotionEvent.requestPermission) {
+      window.DeviceMotionEvent.requestPermission().then(function (answer) {
+        if (answer === 'granted') begin();
+        else { hwDone('motion', 'skipped', 'nem engedélyezte a mozgásadatokat'); hwResult('motion'); }
+      }).catch(function () { hwDone('motion', 'skipped', 'nem engedélyezte a mozgásadatokat'); hwResult('motion'); });
+    } else { begin(); }
+  }
+
+  /* hangszóró és mikrofon */
+  function audioSupported() {
+    return !!((window.AudioContext || window.webkitAudioContext) && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  }
+
+  SCREENS.hw_audio = function () {
+    var ok = hwScreen('audio', 'Húzd ki a fülhallgatót, és vedd fel a hangerőt legalább a felére. Az oldal hangjelzéseket játszik le a hangszórón, és a mikrofon próbálja meghallani őket. Légy csendben közben.', '',
+      audioSupported(), 'ezen a rendszeren a böngésző nem engedi a mikrofon használatát (iOS 11 vagy újabb kell), USB-s programmal ellenőrizhető');
+    if (ok) on('hw-start', startAudio);
+  };
+
+  function randomTones() {
+    var pool = [700, 950, 1250, 1600, 2000, 2500, 3100, 3800], out = [];
+    while (out.length < 4) {
+      var f = pool[Math.floor(Math.random() * pool.length)];
+      if (out.indexOf(f) < 0) out.push(f);
+    }
+    return out;
+  }
+
+  function startAudio() {
+    var AC = window.AudioContext || window.webkitAudioContext, ctx = new AC();
+    if (ctx.resume) ctx.resume();
+    message('result', '<p class="muted">Hangjelzések...</p>');
+    navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } }).then(function (stream) {
+      var analyser = ctx.createAnalyser();
+      analyser.fftSize = 4096;
+      analyser.smoothingTimeConstant = 0;
+      ctx.createMediaStreamSource(stream).connect(analyser);
+      var bins = new Float32Array(analyser.frequencyBinCount);
+      function level(freq) {
+        analyser.getFloatFrequencyData(bins);
+        var hz = ctx.sampleRate / analyser.fftSize, center = Math.round(freq / hz), peak = -200, sum = 0, n = 0;
+        for (var i = 0; i < bins.length; i++) {
+          if (i * hz < 300) continue;
+          if (Math.abs(i - center) <= 3) { if (bins[i] > peak) peak = bins[i]; }
+          else if (bins[i] > -180) { sum += bins[i]; n++; }
+        }
+        return peak - (n ? sum / n : -120);
+      }
+      function play(freq, pan) {
+        var osc = ctx.createOscillator(), gain = ctx.createGain();
+        osc.frequency.value = freq; gain.gain.value = 0.9;
+        osc.connect(gain);
+        if (ctx.createStereoPanner) {
+          var panner = ctx.createStereoPanner(); panner.pan.value = pan; gain.connect(panner); panner.connect(ctx.destination);
+        } else { gain.connect(ctx.destination); }
+        osc.start();
+        return sleep(180).then(function () {
+          var best = -999, i = 0;
+          return (function sample() {
+            best = Math.max(best, level(freq));
+            if (++i >= 8) return best;
+            return sleep(40).then(sample);
+          })();
+        }).then(function (best) { osc.stop(); return sleep(180).then(function () { return best; }); });
+      }
+      function channel(pan) {
+        var expected = randomTones(), heard = [], chain = Promise.resolve();
+        expected.forEach(function (f) {
+          chain = chain.then(function () { return play(f, pan); }).then(function (v) { heard.push(v >= 25); });
+        });
+        return chain.then(function () { return { expected: expected, heard: heard }; });
+      }
+      var stereo = !!ctx.createStereoPanner;
+      var run = stereo
+        ? channel(-1).then(function (left) { return channel(1).then(function (right) { return { left: left, right: right }; }); })
+        : channel(0).then(function (mono) { return { mono: mono }; });
+      return run.then(function (res) {
+        var tracks = stream.getTracks();
+        for (var t = 0; t < tracks.length; t++) tracks[t].stop();
+        try { ctx.close(); } catch (e) { /* nem baj */ }
+        var detail, good;
+        if (res.mono) {
+          var v = P.toneVerdict(res.mono.expected, res.mono.heard);
+          good = v.ok; detail = 'a hangjelzésekből ' + v.heard + ' / ' + v.total + ' hallatszott (ezen a rendszeren a két csatorna külön nem mérhető)';
+          if (!v.heard) detail += '. A hangszóró vagy a mikrofon hibás, vagy nincs felvéve a hangerő';
+        } else {
+          var l = P.toneVerdict(res.left.expected, res.left.heard), r = P.toneVerdict(res.right.expected, res.right.heard);
+          good = l.ok && r.ok;
+          detail = 'bal csatorna ' + l.heard + ' / ' + l.total + ', jobb csatorna ' + r.heard + ' / ' + r.total + ' hang hallatszott';
+          if (!l.heard && !r.heard) detail += '. A hangszóró vagy a mikrofon hibás, vagy nincs felvéve a hangerő';
+        }
+        hwDone('audio', good ? 'ok' : 'bad', detail);
+        hwResult('audio');
+      });
+    }).catch(function (error) {
+      var denied = error && (error.name === 'NotAllowedError' || error.name === 'SecurityError');
+      hwDone('audio', denied ? 'skipped' : 'bad', denied ? 'nem engedélyezte a mikrofont' : 'a mikrofon nem érhető el');
+      hwResult('audio');
+    });
+  }
+
+  /* kamerák */
+  function cameraSupported() { return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia); }
+
+  function cameraScreen(name, facing, lead) {
+    return function () {
+      var ok = hwScreen(name, lead, '<div id="preview"></div>', cameraSupported(),
+        'ezen a rendszeren a böngésző nem engedi a kamera használatát (iOS 11 vagy újabb kell), USB-s programmal ellenőrizhető');
+      if (ok) on('hw-start', function () { startCamera(name, facing); });
+    };
+  }
+  SCREENS.hw_camera_rear = cameraScreen('camera_rear', 'environment', 'Koppints az Indításra, engedélyezd a kamerát, és tartsd a hátlapi kamerát valami elé, ami nem egyszínű. Az oldal azt nézi, hogy valódi kép jön-e.');
+  SCREENS.hw_camera_front = cameraScreen('camera_front', 'user', 'Koppints az Indításra, engedélyezd a kamerát, és nézz az előlapi kamerába. Az oldal azt nézi, hogy valódi kép jön-e.');
+
+  function startCamera(name, facing) {
+    var constraints = state.kind === 'mac' ? { video: true } : { video: { facingMode: { exact: facing } } };
+    navigator.mediaDevices.getUserMedia(constraints).then(function (stream) {
+      var video = document.createElement('video');
+      video.setAttribute('playsinline', ''); video.setAttribute('autoplay', ''); video.muted = true;
+      video.style.width = '100%';
+      $('preview').appendChild(video);
+      video.srcObject = stream;
+      var canvas = document.createElement('canvas');
+      canvas.width = 64; canvas.height = 48;
+      var ctx = canvas.getContext('2d'), started = new Date().getTime(), done = false;
+      function stop() {
+        var tracks = stream.getTracks();
+        for (var t = 0; t < tracks.length; t++) tracks[t].stop();
+        if (video.parentNode) video.parentNode.removeChild(video);
+      }
+      (function sample() {
+        if (done) return;
+        if (video.readyState >= 2) {
+          ctx.drawImage(video, 0, 0, 64, 48);
+          if (P.frameLooksReal(P.frameStats(ctx.getImageData(0, 0, 64, 48).data))) {
+            done = true; stop(); hwDone(name, 'ok', 'élő kép érkezik'); hwResult(name); return;
+          }
+        }
+        if (new Date().getTime() - started > 15000) {
+          done = true; stop();
+          hwDone(name, 'bad', 'csak fekete vagy egyszínű kép érkezett (a lencsét takarja valami, vagy hibás)');
+          hwResult(name);
+          return;
+        }
+        setTimeout(sample, 400);
+      })();
+    }).catch(function (error) {
+      var denied = error && (error.name === 'NotAllowedError' || error.name === 'SecurityError');
+      if (denied) hwDone(name, 'skipped', 'nem engedélyezte a kamerát');
+      else hwDone(name, 'bad', 'nem található működő ' + (facing === 'user' ? 'előlapi' : 'hátlapi') + ' kamera');
+      hwResult(name);
+    });
+  }
+
+  /* kijelző: az egyetlen teszt, ami az eladó válaszára épül, ezért a riportban bemondásként szerepel */
+  SCREENS.hw_display = function () {
+    if (hwScreen('display', 'Végigmegyünk néhány egyszínű képen. Figyeld, van-e halott pixel, folt vagy elszíneződés valamelyiken.', '', true, '')) {
+      on('hw-start', startDisplay);
+    }
+  };
+
+  function startDisplay() {
+    var colors = ['#ffffff', '#000000', '#ff0000', '#00ff00', '#0000ff', '#808080'], i = 0;
+    var overlay = document.createElement('div');
+    overlay.id = 'color-overlay';
+    overlay.innerHTML = '<div id="color"></div><div id="colorbar"><button type="button" class="btn" id="color-next">Következő szín</button></div>';
+    document.body.appendChild(overlay);
+    document.getElementById('color').style.background = colors[0];
+    document.getElementById('color-next').addEventListener('click', function () {
+      i++;
+      if (i < colors.length) { document.getElementById('color').style.background = colors[i]; return; }
+      document.body.removeChild(overlay);
+      message('result', '<p>Láttál halott pixelt, foltot vagy elszíneződést valamelyik színen?</p>' +
+        '<button type="button" class="btn" id="d-no">Nem láttam hibát</button>' +
+        '<button type="button" class="btn secondary" id="d-yes">Igen, van hiba</button>');
+      on('d-no', function () { hwDone('display', 'ok', 'az eladó nem látott hibát'); hwResult('display'); });
+      on('d-yes', function () { hwDone('display', 'bad', 'az eladó hibát látott a kijelzőn'); hwResult('display'); });
+    });
+  }
+
   /* ---- az eszköz adatai, előnézet, küldés ---- */
 
   SCREENS.details = function () {
@@ -796,14 +1110,14 @@
         message('msg', '<div class="error">A sorozatszám 8 és 14 karakter hosszú, betűkből és számokból áll.</div>'); return;
       }
       if (!state.apple) { message('msg', '<div class="error">Válaszd ki, hogy ki vagy-e jelentkezve az Apple-fiókodból.</div>'); return; }
-      go('review');
+      go(hwStart());
     });
   };
 
   SCREENS.review = function () {
     var d = collect();
     var sections = P.buildSections(d);
-    var html = top() + progress(4) +
+    var html = top() + progress(5) +
       '<h1>Ellenőrizd, mit küldünk el</h1>' +
       '<p class="lead">Az alábbi lista a teljes tartalom. Ezeken kívül semmi nem megy el.</p>';
     if (d.cycles === null && d.capacity === null) {

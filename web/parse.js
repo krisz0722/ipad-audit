@@ -154,6 +154,65 @@
     return out;
   }
 
+  /* ---------- hardverteszt: tiszta kiértékelő függvények (az oldal mér, az eladó válasza nem számít) ---------- */
+
+  // Érintőképernyő: minden mezőt érinteni kell, és kellett két ujjas érintés is.
+  function touchTracker(total) {
+    var seen = {}, count = 0, multi = false;
+    return {
+      hit: function (index, fingers) {
+        if (fingers >= 2) multi = true;
+        if (index >= 0 && index < total && !seen[index]) { seen[index] = true; count++; }
+      },
+      state: function () { return { cells: count, total: total, multi: multi, complete: count === total && multi }; }
+    };
+  }
+
+  // Mozgásérzékelő: az eszközt tényleg el kell mozgatni és forgatni, a mért érték számít.
+  function motionTracker() {
+    var min = { x: 99, y: 99 }, max = { x: -99, y: -99 }, rot = 0, events = 0;
+    return {
+      feed: function (acc, rate) {
+        events++;
+        if (acc && typeof acc.x === 'number' && typeof acc.y === 'number') {
+          min.x = Math.min(min.x, acc.x); max.x = Math.max(max.x, acc.x);
+          min.y = Math.min(min.y, acc.y); max.y = Math.max(max.y, acc.y);
+        }
+        if (rate) rot = Math.max(rot, Math.abs(rate.alpha || 0), Math.abs(rate.beta || 0), Math.abs(rate.gamma || 0));
+      },
+      state: function () {
+        var rx = max.x - min.x, ry = max.y - min.y;
+        return { events: events, rangeX: rx, rangeY: ry, rotation: rot, complete: rx > 8 && ry > 8 && rot > 40 };
+      }
+    };
+  }
+
+  // Hangjelzés: a mikrofon hány várt hangot hallott meg.
+  function toneVerdict(expected, heard) {
+    var n = 0;
+    for (var i = 0; i < expected.length; i++) { if (heard[i]) n++; }
+    return { heard: n, total: expected.length, ok: expected.length > 0 && n === expected.length };
+  }
+
+  // Kamera: egy képkocka akkor valódi, ha nem fekete, nem fehér és nem egyszínű.
+  function frameStats(rgba) {
+    var sum = 0, sumSq = 0, n = 0;
+    for (var i = 0; i + 2 < rgba.length; i += 16) {
+      var lum = 0.299 * rgba[i] + 0.587 * rgba[i + 1] + 0.114 * rgba[i + 2];
+      sum += lum; sumSq += lum * lum; n++;
+    }
+    if (!n) return { mean: 0, std: 0 };
+    var mean = sum / n;
+    return { mean: mean, std: Math.sqrt(Math.max(0, sumSq / n - mean * mean)) };
+  }
+  function frameLooksReal(stats) { return stats.std >= 12 && stats.mean >= 8 && stats.mean <= 247; }
+
+  var HW_LABELS = { touch: 'Érintőképernyő', motion: 'Mozgásérzékelők', audio: 'Hangszóró és mikrofon',
+    camera_rear: 'Hátlapi kamera', camera_front: 'Előlapi kamera', display: 'Kijelző színei' };
+  // Amit az oldal mér (a kijelző színei bemondás, ezért az összegzésben nem szerepel).
+  var HW_MEASURED = { ios: ['touch', 'motion', 'audio', 'camera_rear', 'camera_front'], mac: ['audio', 'camera_front'] };
+  var HW_SHOWN = { ios: ['touch', 'motion', 'audio', 'camera_rear', 'camera_front', 'display'], mac: ['audio', 'camera_front', 'display'] };
+
   // A riport szakaszai a Code.gs finish_ műveletének formátumában.
   function buildSections(d) {
     var src = d.sources || {};
@@ -164,11 +223,13 @@
     var device = [
       row('Típus', d.kind === 'mac' ? 'Mac' : 'iPad / iPhone', 'info', 'választotta'),
       row('Modell', d.model ? d.model + (d.modelId ? ' (' + d.modelId + ')' : '') : '', 'info', src.model),
-      row('Chip', d.chip, 'info', src.chip),
-      row('Memória', d.memory, 'info', src.memory),
       row('Tárhely', d.storage, 'info', src.storage),
       row('Rendszerverzió', d.os, 'info', src.os)
     ];
+    // A chip és a memória csak Macnél értelmes, iPaden és iPhone-on soha nem kérjük.
+    if (d.kind === 'mac') {
+      device.splice(2, 0, row('Chip', d.chip, 'info', src.chip), row('Memória', d.memory, 'info', src.memory));
+    }
     if (d.serialRaw) {
       device.push(row('Sorozatszám', d.serialRaw, 'info', 'az eladó jóváhagyta'));
     } else {
@@ -179,9 +240,9 @@
     var deferText = (d.batteryDefer && d.cycles === null && d.capacity === null) ? 'nincs napló, USB-s méréssel pótlandó (az eladó számítógépén)' : '';
     var battery = [
       row('Ciklusszám', d.cycles === null ? deferText : d.cycles, 'info', src.cycles),
-      row('Maximális kapacitás', d.capacity === null ? deferText : d.capacity + '%', 'info', src.capacity),
-      row('Akkumulátor állapota', d.condition, /^(normal|good)$/i.test(d.condition || '') ? 'ok' : 'warn', src.condition)
+      row('Maximális kapacitás', d.capacity === null ? deferText : d.capacity + '%', 'info', src.capacity)
     ];
+    if (d.condition) battery.push(row('Akkumulátor állapota', d.condition, /^(normal|good)$/i.test(d.condition) ? 'ok' : 'warn', src.condition));
     if (d.fileDate) battery.push(row('Az analitikai fájl kelte', d.fileDate, 'info', 'fájlból'));
 
     var appleText = { yes: 'kijelentkezett, a Keresés kikapcsolva', no: 'még nincs kijelentkezve', unsure: 'nem biztos benne' }[d.apple] || '';
@@ -227,12 +288,32 @@
     if (d.kind === 'mac' && (d.dep || d.mdm)) {
       summary.push(row('Céges felügyelet', 'VAN: a gép céges vagy iskolai felügyelet alatt áll', 'bad', ''));
     }
+    var measured = HW_MEASURED[d.kind === 'mac' ? 'mac' : 'ios'], okN = 0, badN = 0, untestedN = 0;
+    for (var h = 0; h < measured.length; h++) {
+      var rec = d.hw && d.hw[measured[h]];
+      if (rec && rec.status === 'ok') okN++; else if (rec && rec.status === 'bad') badN++; else untestedN++;
+    }
+    summary.push(row('Hardver (mért tesztek)',
+      okN + ' rendben' + (badN ? ', ' + badN + ' hibás' : '') + (untestedN ? ', ' + untestedN + ' nem tesztelt' : ''),
+      badN ? 'bad' : (untestedN ? 'warn' : 'ok'), ''));
+
+    var hardware = [];
+    var shown = HW_SHOWN[d.kind === 'mac' ? 'mac' : 'ios'];
+    for (var k = 0; k < shown.length; k++) {
+      var r = d.hw && d.hw[shown[k]], label = HW_LABELS[shown[k]], tag = shown[k] === 'display' ? 'bemondás' : 'mért';
+      if (r && r.status === 'ok') hardware.push(row(label, r.detail || 'rendben', 'ok', tag));
+      else if (r && r.status === 'bad') hardware.push(row(label, r.detail || 'hibás', 'bad', tag));
+      else if (r && r.status === 'unavailable') hardware.push(row(label, r.detail || 'ezen a rendszeren a böngészőből nem ellenőrizhető', 'nodata', ''));
+      else if (r && r.status === 'skipped') hardware.push(row(label, 'kihagyta' + (r.detail ? ': ' + r.detail : ''), 'nodata', ''));
+      else hardware.push(row(label, 'nem tesztelt', 'nodata', ''));
+    }
 
     return [
       { title: 'Összegzés a vevőnek', rows: summary },
       { title: 'Eszköz', rows: device },
       { title: 'Akkumulátor', rows: battery },
       { title: 'Zárak és felügyelet', rows: locks },
+      { title: 'Hardverteszt', rows: hardware },
       { title: 'Az adatok jellege', rows: [
         row('Forrás', 'Az eladó a saját eszközén gyűjtötte egy böngészős varázslóval. Az összegzés mutatja, melyik adat olvasható ki a rendszerből, és melyik az eladó bevallása.', 'info', '')
       ] }
@@ -290,6 +371,7 @@
 
   return {
     sha256Hex: sha256Hex, fingerprint: fingerprint, normalizeSerial: normalizeSerial, storageLabel: storageLabel,
-    parseIpadFile: parseIpadFile, parseMacOutput: parseMacOutput, parseUsbOutput: parseUsbOutput, buildSections: buildSections, detectOs: detectOs
+    parseIpadFile: parseIpadFile, parseMacOutput: parseMacOutput, parseUsbOutput: parseUsbOutput, buildSections: buildSections, detectOs: detectOs,
+    touchTracker: touchTracker, motionTracker: motionTracker, toneVerdict: toneVerdict, frameStats: frameStats, frameLooksReal: frameLooksReal
   };
 });

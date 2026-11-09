@@ -274,3 +274,84 @@ test('USB-ből jövő adat: az akku ok, az iPad zárja is megjelenik', () => {
   const summaryLock = section(sections, 'Összegzés a vevőnek').rows.find((r) => r.label === 'Aktiválási zár');
   assert.match(summaryLock.value, /az eszközből kiolvasva/);
 });
+
+test('touchTracker: minden mező és két ujjas érintés kell', () => {
+  const t = P.touchTracker(4);
+  t.hit(0, 1); t.hit(1, 1); t.hit(2, 1); t.hit(3, 1);
+  assert.strictEqual(t.state().cells, 4);
+  assert.strictEqual(t.state().complete, false);
+  t.hit(0, 2);
+  assert.strictEqual(t.state().complete, true);
+});
+
+test('touchTracker: ugyanazt a mezőt nem számolja kétszer, érvénytelen indexet eldob', () => {
+  const t = P.touchTracker(3);
+  t.hit(1, 1); t.hit(1, 1); t.hit(-1, 1); t.hit(9, 1);
+  assert.strictEqual(t.state().cells, 1);
+});
+
+test('motionTracker: kell mozgás és forgás is, mért érték alapján', () => {
+  const still = P.motionTracker();
+  still.feed({ x: 0.1, y: 0.2, z: -9.8 }, { alpha: 1, beta: 1, gamma: 1 });
+  assert.strictEqual(still.state().complete, false);
+  assert.strictEqual(still.state().events, 1);
+  const moved = P.motionTracker();
+  moved.feed({ x: -6, y: -5, z: 0 }, { alpha: 10, beta: 0, gamma: 0 });
+  moved.feed({ x: 6, y: 5, z: 0 }, { alpha: 0, beta: 55, gamma: 0 });
+  assert.strictEqual(moved.state().complete, true);
+  const noSensor = P.motionTracker();
+  assert.strictEqual(noSensor.state().events, 0);
+});
+
+test('toneVerdict: csak akkor jó, ha minden hangot meghallott', () => {
+  assert.deepStrictEqual(P.toneVerdict([700, 950], [true, true]), { heard: 2, total: 2, ok: true });
+  assert.strictEqual(P.toneVerdict([700, 950], [true, false]).ok, false);
+  assert.strictEqual(P.toneVerdict([], []).ok, false);
+});
+
+test('frameStats és frameLooksReal: fekete, fehér és egyszínű kép nem valódi', () => {
+  const size = 64 * 48 * 4;
+  const black = new Uint8ClampedArray(size).fill(0);
+  const white = new Uint8ClampedArray(size).fill(255);
+  const flat = new Uint8ClampedArray(size).fill(128);
+  const real = new Uint8ClampedArray(size);
+  for (let i = 0; i < size; i += 4) { const v = (i / 4) % 7 * 36; real[i] = v; real[i + 1] = 255 - v; real[i + 2] = (v * 3) % 255; real[i + 3] = 255; }
+  assert.strictEqual(P.frameLooksReal(P.frameStats(black)), false);
+  assert.strictEqual(P.frameLooksReal(P.frameStats(white)), false);
+  assert.strictEqual(P.frameLooksReal(P.frameStats(flat)), false);
+  assert.strictEqual(P.frameLooksReal(P.frameStats(real)), true);
+});
+
+test('hardverteszt a riportban: mért és bemondás jelölés, hiányzó teszt, összegzés', () => {
+  const hw = {
+    touch: { status: 'ok', detail: 'mind a 96 mező érzékelt, két ujjal is' },
+    motion: { status: 'bad', detail: 'nem érkezett mozgásadat' },
+    audio: { status: 'unavailable', detail: 'iOS 11 vagy újabb kell' },
+    display: { status: 'ok', detail: 'nem látott hibát' }
+  };
+  const sections = P.buildSections(sampleData({ kind: 'ios', hw }));
+  const rows = section(sections, 'Hardverteszt').rows;
+  const byLabel = (label) => rows.find((r) => r.label === label);
+  assert.strictEqual(byLabel('Érintőképernyő').status, 'ok');
+  assert.strictEqual(byLabel('Érintőképernyő').tag, 'mért');
+  assert.strictEqual(byLabel('Mozgásérzékelők').status, 'bad');
+  assert.strictEqual(byLabel('Hangszóró és mikrofon').status, 'nodata');
+  assert.strictEqual(byLabel('Kijelző színei').tag, 'bemondás');
+  assert.strictEqual(byLabel('Hátlapi kamera').value, 'nem tesztelt');
+  const summary = section(sections, 'Összegzés a vevőnek').rows.find((r) => r.label === 'Hardver (mért tesztek)');
+  assert.strictEqual(summary.status, 'bad');
+  assert.match(summary.value, /1 rendben, 1 hibás, 3 nem tesztelt/);
+});
+
+test('hardverteszt: Macnél csak a hang, az előlapi kamera és a kijelző szerepel', () => {
+  const rows = section(P.buildSections(sampleData({ kind: 'mac' })), 'Hardverteszt').rows.map((r) => r.label);
+  assert.deepStrictEqual(rows, ['Hangszóró és mikrofon', 'Előlapi kamera', 'Kijelző színei']);
+});
+
+test('hardverteszt: ha minden mért teszt rendben, az összegzés ok', () => {
+  const ok = (detail) => ({ status: 'ok', detail });
+  const hw = { touch: ok('x'), motion: ok('x'), audio: ok('x'), camera_rear: ok('x'), camera_front: ok('x') };
+  const summary = section(P.buildSections(sampleData({ kind: 'ios', hw })), 'Összegzés a vevőnek').rows.find((r) => r.label === 'Hardver (mért tesztek)');
+  assert.strictEqual(summary.status, 'ok');
+  assert.match(summary.value, /^5 rendben$/);
+});
