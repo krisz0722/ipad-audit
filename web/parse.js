@@ -167,11 +167,14 @@
       row('Chip', d.chip, 'info', src.chip),
       row('Memória', d.memory, 'info', src.memory),
       row('Tárhely', d.storage, 'info', src.storage),
-      row('Rendszerverzió', d.os, 'info', src.os),
-      row('Sorozatszám lenyomat', d.fingerprint, 'info', 'a meghívókóddal kulcsolt SHA-256, első 16 karakter'),
-      row('Sorozatszám vége', d.serialTail, 'info', src.serial)
+      row('Rendszerverzió', d.os, 'info', src.os)
     ];
-    if (d.serialRaw) device.push(row('Sorozatszám', d.serialRaw, 'info', 'az eladó megosztotta'));
+    if (d.serialRaw) {
+      device.push(row('Sorozatszám', d.serialRaw, 'info', 'az eladó jóváhagyta'));
+    } else {
+      device.push(row('Sorozatszám lenyomat', d.fingerprint, 'info', 'a meghívókóddal kulcsolt SHA-256, első 16 karakter'));
+      device.push(row('Sorozatszám vége', d.serialTail, 'info', src.serial));
+    }
 
     var deferText = (d.batteryDefer && d.cycles === null && d.capacity === null) ? 'nincs napló, USB-s méréssel pótlandó (az eladó számítógépén)' : '';
     var battery = [
@@ -190,12 +193,45 @@
       locks.push(row('Céges felügyelet (MDM)', mdm, mdm === 'van' ? 'bad' : 'ok', src.mdm));
     }
 
+    // Összegzés a vevőnek: melyik adat olvasható ki a rendszerből, és melyik az eladó szava.
+    var systemSource = { 'fájlból': true, 'naplóból': true, 'parancsból': true };
+    var summary = [];
+    var batterySources = [];
+    if (d.cycles !== null) batterySources.push(src.cycles);
+    if (d.capacity !== null) batterySources.push(src.capacity);
+    if (!batterySources.length) {
+      summary.push(row('Akkumulátor', d.batteryDefer ? 'nincs adat, USB-s méréssel pótlandó' : 'nincs adat', 'warn', ''));
+    } else if (batterySources.every(function (s) { return systemSource[s]; })) {
+      summary.push(row('Akkumulátor', 'a rendszerből kiolvasott érték, nehezen hamisítható', 'ok', ''));
+    } else {
+      summary.push(row('Akkumulátor', 'az eladó írta be, nem ellenőrizhető', 'warn', ''));
+    }
+    if (d.serialRaw) {
+      summary.push(row('Modell', 'a sorozatszámmal az Apple lefedettség-ellenőrzőjén megnézhető: https://checkcoverage.apple.com/', 'info', ''));
+    } else if (d.fingerprint) {
+      summary.push(row('Modell', 'a sorozatszámot az eladó nem küldte el, kérd el tőle, és nézd meg az Apple lefedettség-ellenőrzőjén', 'warn', ''));
+    } else {
+      summary.push(row('Modell', 'nincs sorozatszám, a modell nem ellenőrizhető', 'warn', ''));
+    }
+    if (d.kind === 'mac' && d.activationLock) {
+      summary.push(row('Aktiválási zár', d.activationLock === 'Enabled' ? 'BEKAPCSOLVA, az új tulajdonos nem tudja használni' : 'kikapcsolva, a gépből kiolvasva',
+        d.activationLock === 'Enabled' ? 'bad' : 'ok', ''));
+    } else {
+      summary.push(row('Apple-fiók zár',
+        d.apple === 'no' ? 'az eladó szerint még be van jelentkezve' : (d.apple === 'yes' ? 'az eladó szerint ki van jelentkezve, az eszközből ez nem olvasható ki' : 'az eladó nem biztos benne'),
+        d.apple === 'no' ? 'bad' : (d.apple === 'yes' ? 'info' : 'warn'), ''));
+    }
+    if (d.kind === 'mac' && (d.dep || d.mdm)) {
+      summary.push(row('Céges felügyelet', 'VAN: a gép céges vagy iskolai felügyelet alatt áll', 'bad', ''));
+    }
+
     return [
+      { title: 'Összegzés a vevőnek', rows: summary },
       { title: 'Eszköz', rows: device },
       { title: 'Akkumulátor', rows: battery },
       { title: 'Zárak és felügyelet', rows: locks },
       { title: 'Az adatok jellege', rows: [
-        row('Forrás', 'Az eladó a saját eszközén gyűjtötte egy böngészős varázslóval. Nem hitelesített mérés, átvételkor ellenőrizd újra.', 'info', '')
+        row('Forrás', 'Az eladó a saját eszközén gyűjtötte egy böngészős varázslóval. Az összegzés mutatja, melyik adat olvasható ki a rendszerből, és melyik az eladó bevallása.', 'info', '')
       ] }
     ];
   }

@@ -26,7 +26,7 @@
     vals: { model: '', storage: '', os: '', memory: '', chip: '', serial: '', cycles: '', capacity: '' },
     parsed: {},
     extra: { condition: '', fileDate: '', activationLock: '', dep: null, mdm: null, modelId: '' },
-    shareSerial: false, apple: '', sid: '', sending: false, noLog: false
+    shareSerial: true, apple: '', sid: '', sending: false, noLog: false
   };
 
   /* ---------- segédek ---------- */
@@ -223,7 +223,7 @@
           '<li>az akkumulátor ciklusszáma és maximális kapacitása</li>' +
           '<li>az eszköz típusa, tárhelye és rendszerverziója</li>' +
           '<li>hogy ki van-e jelentkezve az Apple-fiókodból</li>' +
-          '<li>a sorozatszám lenyomata, nem maga a sorozatszám</li>' +
+          '<li>a sorozatszám, hogy a vásárló az Apple-nél ellenőrizhesse a modellt (kikapcsolhatod)</li>' +
         '</ul></div>' +
         '<div class="card"><h3>Ezt soha nem kérjük</h3><ul class="marks no">' +
           '<li>jelszavak, Apple-fiók, e-mail cím, telefonszám</li>' +
@@ -502,8 +502,8 @@
       textField('f-serial', 'Sorozatszám', v.serial, 'Például: C02XXXXXXXXX',
         mac ? 'Apple menü &gt; Erről a Macről.' : 'Beállítások &gt; Általános &gt; Névjegy &gt; Sorozatszám. Hosszan nyomva másolhatod.', 20,
         ' autocapitalize="characters"') +
-      '<div class="note">A sorozatszámból alapértelmezés szerint <b>csak egy lenyomatot</b> küldünk, egy kódot, amiből a sorozatszám nem fejthető vissza, és az utolsó 4 karakterét. A vásárló átvételkor kiszámolja ugyanezt a készülékről, így ellenőrzi, hogy ugyanaz az eszköz érkezett-e meg.</div>' +
-      '<label class="check"><input type="checkbox" id="share"' + (state.shareSerial ? ' checked' : '') + '> A teljes sorozatszámot is megosztom, hogy a vásárló le tudja ellenőrizni az Apple jótállási adatait. (Nem kötelező.)</label>' +
+      '<div class="note">A sorozatszámot elküldjük a vásárlónak, hogy az Apple lefedettség-ellenőrzőjén megnézhesse a modellt. Ha ezt nem szeretnéd, vedd ki a pipát: akkor <b>csak egy lenyomatot</b> küldünk, egy kódot, amiből a sorozatszám nem fejthető vissza, és az utolsó 4 karakterét.</div>' +
+      '<label class="check"><input type="checkbox" id="share"' + (state.shareSerial ? ' checked' : '') + '> A sorozatszámot elküldöm a vásárlónak, hogy ellenőrizhesse az Apple-nél a modellt.</label>' +
       '<h2>Ki vagy jelentkezve az Apple-fiókodból?</h2>' +
       '<p class="muted">Ha az eszköz még a te Apple-fiókodhoz van kötve (Aktiválási zár), az új tulajdonos nem tudja használni. Kijelentkezés: ' + (mac ? 'Apple menü &gt; Rendszerbeállítások, legfelül a neved, majd Kijelentkezés.' : cur.signout) + '</p>' +
       '<label class="radio"><input type="radio" name="apple" value="yes"' + (state.apple === 'yes' ? ' checked' : '') + '> Kijelentkeztem, és a Keresés funkció ki van kapcsolva</label>' +
@@ -574,7 +574,7 @@
 
   function send(sections, d) {
     if (state.sending) return;
-    var serialField = d.serialRaw || d.fingerprint || 'nincs';
+    var serialField = d.fingerprint || 'nincs';
     if (DEMO) { done(sections); return; }
     if (!window.BACKEND_URL) { message('msg', '<div class="error">Az oldal nincs beállítva. Szólj a vásárlónak.</div>'); return; }
     state.sending = true;

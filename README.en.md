@@ -14,7 +14,7 @@ The code is public so that the seller (and anyone else) can see exactly what the
 | device type, storage size, system version | photos, messages, contacts, files |
 | whether you are signed out of your Apple ID (you tell us) | installed apps, browsing data |
 | on a Mac: Activation Lock state, managed by an organization yes/no | IMEI, device name, location, Wi-Fi networks, MAC addresses, UDID |
-| a fingerprint of the serial number and its last 4 characters | the full serial number (only if the seller explicitly shares it) |
+| the serial number (the buyer checks the model with Apple; the seller can switch it off in the preview, then only a fingerprint and its last 4 characters are sent) | |
 
 The seller sees everything in a preview first, and nothing leaves the device until they press **Send**. The preview is built by the same function as the payload that is sent, so the two cannot differ.
 
@@ -29,7 +29,7 @@ The deployed Apps Script cannot be verified from the outside, only the file in t
 
 ### How the serial number is handled
 
-By default the report contains only the first 16 characters of `SHA-256(invite code + ":" + serial number)`. The invite code exists only with the seller and the buyer, so the serial number cannot be recovered from the email. On receipt the buyer can compute the same value from the device's serial number and confirm that the same device arrived.
+By default the serial number goes to the buyer so that they can check the model with Apple's coverage checker. The seller sees it in the preview and can switch it off. In that case only the first 16 characters of `SHA-256(invite code + ":" + serial number)` and the last 4 characters of the serial number are sent. The invite code exists only with the seller and the buyer, so the serial number cannot be recovered from the email. When the device arrives, the buyer can compute the same value from the received device's serial number and confirm that the same device arrived. The serial number never appears in the email subject, only the fingerprint does.
 
 ## How does it work?
 

@@ -14,7 +14,7 @@ A kód nyilvános, hogy az eladó (és bárki) megnézhesse, pontosan mit olvas 
 | eszköz típusa, tárhelye, rendszerverziója | fotók, üzenetek, névjegyek, fájlok |
 | az Apple-fiók kijelentkezési állapota (az eladó adja meg) | telepített alkalmazások, böngészési adatok |
 | Macen: Aktiválási zár állapota, céges felügyelet igen/nem | IMEI, eszköznév, helyadat, Wi-Fi hálózatok, MAC-címek, UDID |
-| a sorozatszám lenyomata és utolsó 4 karaktere | a teljes sorozatszám (csak ha az eladó kifejezetten megosztja) |
+| a sorozatszám (a vásárló ezzel ellenőrzi az Apple-nél a modellt; az előnézetben kikapcsolhatod, akkor csak a lenyomata és az utolsó 4 karaktere megy el) | |
 
 Az eladó minden adatot előbb lát egy előnézetben, és csak a **Küldés** gomb megnyomása után megy el bármi. Az előnézet ugyanabból a függvényből épül, mint az elküldött tartalom, ezért a kettő nem térhet el.
 
@@ -29,7 +29,7 @@ Az Apps Script telepített változata nem ellenőrizhető kívülről, csak a re
 
 ### A sorozatszám kezelése
 
-A riportban alapból csak a `SHA-256(meghívókód + ":" + sorozatszám)` első 16 karaktere szerepel. A meghívókód csak az eladónál és a vásárlónál van meg, a levélből ezért a sorozatszám nem fejthető vissza. Átvételkor a vásárló kiszámolhatja ugyanezt a készülék sorozatszámából, és így ellenőrizheti, hogy ugyanaz az eszköz érkezett-e meg.
+A sorozatszám alapból elmegy a vásárlónak, hogy az Apple lefedettség-ellenőrzőjén ellenőrizhesse a modellt. Az eladó az előnézetben látja, és kikapcsolhatja. Ilyenkor csak a `SHA-256(meghívókód + ":" + sorozatszám)` első 16 karaktere és a sorozatszám utolsó 4 karaktere megy el. A meghívókód csak az eladónál és a vásárlónál van meg, a levélből ezért a sorozatszám nem fejthető vissza. Amikor az eszköz megérkezik, a vásárló kiszámolhatja ugyanezt a kapott készülék sorozatszámából, és így ellenőrizheti, hogy ugyanaz az eszköz érkezett-e meg. A levél tárgyában a sorozatszám sosem szerepel, csak a lenyomat.
 
 ## Hogyan működik?
 

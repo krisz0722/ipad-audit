@@ -131,7 +131,7 @@ test('buildSections: a nyers sorozatszám csak megosztáskor kerül bele', () =>
 
 test('buildSections: hiányzó érték nodata, minden sor szöveges és van tag', () => {
   const sections = P.buildSections(sampleData({ cycles: null, capacity: null }));
-  const battery = sections[1].rows;
+  const battery = sections[2].rows;
   assert.strictEqual(battery[0].status, 'nodata');
   assert.strictEqual(battery[0].value, 'nem adta meg');
   sections.forEach((s) => s.rows.forEach((r) => {
@@ -142,7 +142,7 @@ test('buildSections: hiányzó érték nodata, minden sor szöveges és van tag'
 });
 
 test('buildSections: zárak státusza', () => {
-  const locks = P.buildSections(sampleData({ apple: 'no', activationLock: 'Enabled', mdm: true }))[2].rows;
+  const locks = P.buildSections(sampleData({ apple: 'no', activationLock: 'Enabled', mdm: true }))[3].rows;
   assert.strictEqual(locks[0].status, 'bad');
   assert.strictEqual(locks[1].status, 'bad');
   assert.strictEqual(locks[2].status, 'bad');
@@ -172,11 +172,54 @@ test('detectOs: iPadOS asztali módban és Mac', () => {
 });
 
 test('buildSections: az átvételkor mérendő akku külön jelölést kap', () => {
-  const deferred = P.buildSections(sampleData({ cycles: null, capacity: null, batteryDefer: true }))[1].rows;
+  const deferred = P.buildSections(sampleData({ cycles: null, capacity: null, batteryDefer: true }))[2].rows;
   assert.match(deferred[0].value, /USB-s méréssel pótlandó/);
   assert.strictEqual(deferred[0].status, 'info');
-  const plain = P.buildSections(sampleData({ cycles: null, capacity: null }))[1].rows;
+  const plain = P.buildSections(sampleData({ cycles: null, capacity: null }))[2].rows;
   assert.strictEqual(plain[0].value, 'nem adta meg');
-  const measured = P.buildSections(sampleData({ cycles: 244, capacity: 85, batteryDefer: true }))[1].rows;
+  const measured = P.buildSections(sampleData({ cycles: 244, capacity: 85, batteryDefer: true }))[2].rows;
   assert.strictEqual(measured[0].value, '244');
+});
+
+const section = (sections, title) => sections.find((s) => s.title === title);
+
+test('összegzés: az akku forrása szerint ok vagy warn', () => {
+  const system = section(P.buildSections(sampleData({ sources: { cycles: 'naplóból', capacity: 'naplóból' } })), 'Összegzés a vevőnek').rows;
+  assert.strictEqual(system[0].label, 'Akkumulátor');
+  assert.strictEqual(system[0].status, 'ok');
+  const typed = section(P.buildSections(sampleData({ sources: { cycles: 'beírta', capacity: 'naplóból' } })), 'Összegzés a vevőnek').rows;
+  assert.strictEqual(typed[0].status, 'warn');
+  const deferred = section(P.buildSections(sampleData({ cycles: null, capacity: null, batteryDefer: true })), 'Összegzés a vevőnek').rows;
+  assert.match(deferred[0].value, /USB-s méréssel pótlandó/);
+  assert.strictEqual(deferred[0].status, 'warn');
+});
+
+test('összegzés: a modell ellenőrzése a sorozatszámtól függ', () => {
+  const shared = section(P.buildSections(sampleData({ serialRaw: 'C02XYZ123456' })), 'Összegzés a vevőnek').rows;
+  assert.match(shared[1].value, /checkcoverage\.apple\.com/);
+  const hidden = section(P.buildSections(sampleData()), 'Összegzés a vevőnek').rows;
+  assert.strictEqual(hidden[1].status, 'warn');
+  const none = section(P.buildSections(sampleData({ fingerprint: '', serialTail: '' })), 'Összegzés a vevőnek').rows;
+  assert.match(none[1].value, /nincs sorozatszám/);
+});
+
+test('összegzés: zárak és felügyelet', () => {
+  const rows = section(P.buildSections(sampleData({ activationLock: 'Enabled', mdm: true })), 'Összegzés a vevőnek').rows;
+  const lock = rows.find((r) => r.label === 'Aktiválási zár');
+  assert.strictEqual(lock.status, 'bad');
+  assert.strictEqual(rows.find((r) => r.label === 'Céges felügyelet').status, 'bad');
+  const ios = section(P.buildSections(sampleData({ kind: 'ios', activationLock: '', apple: 'yes' })), 'Összegzés a vevőnek').rows;
+  const apple = ios.find((r) => r.label === 'Apple-fiók zár');
+  assert.strictEqual(apple.status, 'info');
+  assert.match(apple.value, /nem olvasható ki/);
+});
+
+test('sorozatszám sorok: megosztáskor a nyers érték, különben lenyomat és vége', () => {
+  const shared = section(P.buildSections(sampleData({ serialRaw: 'C02XYZ123456' })), 'Eszköz').rows.map((r) => r.label);
+  assert.ok(shared.includes('Sorozatszám'));
+  assert.ok(!shared.includes('Sorozatszám lenyomat'));
+  const hidden = section(P.buildSections(sampleData()), 'Eszköz').rows.map((r) => r.label);
+  assert.ok(hidden.includes('Sorozatszám lenyomat'));
+  assert.ok(hidden.includes('Sorozatszám vége'));
+  assert.ok(!hidden.includes('Sorozatszám'));
 });
