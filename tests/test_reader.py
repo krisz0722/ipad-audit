@@ -60,3 +60,25 @@ def test_reader_has_no_network_code():
     forbidden = re.compile(r"^\s*(import|from)\s+(urllib|requests|http|socket|ssl|httpx|aiohttp|backend|ipad_audit\.backend)\b", re.M)
     assert not forbidden.search(source)
     assert "backend" not in source.replace("Hálózat", "")
+
+
+def test_clipboard_command_per_platform():
+    assert reader.clipboard_command("win32") == ["clip"]
+    assert reader.clipboard_command("darwin") == ["pbcopy"]
+    assert reader.clipboard_command("linux", which=lambda name: "/usr/bin/" + name if name == "wl-copy" else None) == ["wl-copy"]
+    assert reader.clipboard_command("linux", which=lambda name: "/usr/bin/" + name if name == "xclip" else None) == ["xclip", "-selection", "clipboard"]
+    assert reader.clipboard_command("linux", which=lambda name: None) is None
+
+
+def test_copy_without_clipboard_tool_is_false():
+    # A valódi vágólaphoz a teszt nem nyúlhat, ezért a parancskeresést lecseréljük.
+    original = reader.clipboard_command
+    reader.clipboard_command = lambda platform, which=None: None
+    try:
+        assert reader.copy_to_clipboard("x") is False
+    finally:
+        reader.clipboard_command = original
+
+
+def test_pause_does_nothing_when_not_frozen():
+    reader.pause()

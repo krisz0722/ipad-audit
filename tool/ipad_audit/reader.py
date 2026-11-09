@@ -6,6 +6,8 @@ látja, mi megy tovább. UDID-t, IMEI-t, MAC-címet, eszköznevet nem olvas ki.
 """
 import asyncio
 import re
+import shutil
+import subprocess
 import sys
 
 from ipad_audit.report import MODELS
@@ -81,13 +83,62 @@ async def read_raw(notify):
     return raw
 
 
+def clipboard_command(platform, which=shutil.which):
+    """A vágólapra másoló rendszerparancs, vagy None, ha nincs ilyen."""
+    if platform.startswith("win"):
+        return ["clip"]
+    if platform == "darwin":
+        return ["pbcopy"]
+    for command in (["wl-copy"], ["xclip", "-selection", "clipboard"], ["xsel", "--clipboard", "--input"]):
+        if which(command[0]):
+            return command
+    return None
+
+
+def copy_to_clipboard(text, platform=sys.platform):
+    """Csak a helyi vágólapra másol, hálózatot nem használ."""
+    command = clipboard_command(platform)
+    if not command:
+        return False
+    try:
+        subprocess.run(command, input=text.encode("ascii", "replace"), check=True, timeout=10)
+        return True
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def pause():
+    """Windowson a duplakattintással indított ablak a kilépéskor azonnal bezárulna, ezért Enterre várunk."""
+    if getattr(sys, "frozen", False) and sys.stdin and sys.stdin.isatty() and sys.stdout.isatty():
+        try:
+            input("\nNyomj Entert az ablak bezárásához...")
+        except EOFError:
+            pass
+
+
 def main():
     def notify(message):
         print(message, file=sys.stderr)
 
     print("iPad akku-kiolvasó. Csak olvas, semmit nem küld el.", file=sys.stderr)
-    raw = asyncio.run(read_raw(notify))
-    print(build_block(raw))
+    try:
+        raw = asyncio.run(read_raw(notify))
+    except (TimeoutError, KeyboardInterrupt):
+        print("\nNem sikerült kapcsolódni az eszközhöz. Ellenőrizd a kábelt, oldd fel az eszközt, és koppints a Megbízom gombra, majd indítsd újra a programot.", file=sys.stderr)
+        pause()
+        sys.exit(1)
+    except Exception as error:
+        print("\nHiba történt: %s" % _text(error, 120), file=sys.stderr)
+        print("Windowson ellenőrizd, hogy az iTunes vagy az Apple Devices alkalmazás telepítve van-e.", file=sys.stderr)
+        pause()
+        sys.exit(1)
+    block = build_block(raw)
+    print(block)
+    if copy_to_clipboard(block):
+        print("\nA fenti szöveg a vágólapra került. Illeszd be a weboldalon.", file=sys.stderr)
+    else:
+        print("\nMásold ki a fenti szöveget (az IPAD-AUDIT-USB sortól az END sorig), és illeszd be a weboldalon.", file=sys.stderr)
+    pause()
 
 
 if __name__ == "__main__":
