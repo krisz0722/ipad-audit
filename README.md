@@ -1,5 +1,7 @@
 # iPad és Mac állapot-ellenőrzés
 
+**Magyar** | [English](README.en.md)
+
 Használt iPad, iPhone és Mac vásárlásához készült ellenőrző eszköz. A vásárló egyszer használható linket küld az eladónak, az eladó a saját eszközén végigmegy egy varázslón, és az eredmény egyetlen emailben megy a vásárlónak.
 
 A kód nyilvános, hogy az eladó (és bárki) megnézhesse, pontosan mit olvas ki az oldal, és mit küld el.
