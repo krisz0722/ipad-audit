@@ -20,9 +20,9 @@ The seller sees everything in a preview first, and nothing leaves the device unt
 
 ### How can you check this?
 
-- [web/seller/parse.js](web/seller/parse.js): the readers. They only read a fixed list of fields and ignore everything else. The serial number fingerprint and the report structure are built here too.
-- [web/seller/seller.js](web/seller/seller.js): the wizard. The only network request is in the `send()` function, after the Send button.
-- [web/seller/index.html](web/seller/index.html): the page loads no third-party scripts, only its own files.
+- [web/parse.js](web/parse.js): the readers. They only read a fixed list of fields and ignore everything else. The serial number fingerprint and the report structure are built here too.
+- [web/seller.js](web/seller.js): the wizard. The only network request is in the `send()` function, after the Send button.
+- [web/index.html](web/index.html): the page loads no third-party scripts, only its own files.
 - [backend/Code.gs](backend/Code.gs): the receiving Google Apps Script. It accepts nothing without an invitation, stores only the code, label, expiry and status in the sheet, and delivers the result by email.
 
 The deployed Apps Script cannot be verified from the outside, only the file in this repository can.
@@ -35,8 +35,8 @@ By default the report contains only the first 16 characters of `SHA-256(invite c
 
 There are two modes:
 
-1. **Seller wizard** ([web/seller/](web/seller/)): runs in the browser, nothing to install. On a Mac the seller pastes the output of a read-only Terminal command. On an iPad or iPhone the battery values come from Settings or from the system analytics file. The data is self-reported, so it is **not an authenticated measurement**.
-2. **Receiving program** ([tool/](tool/), [web/app.js](web/app.js)): runs on the buyer's computer and reads the iPad over USB (`pymobiledevice3`). This is the authenticated measurement, because the data comes from the device itself, not from the seller's browser.
+1. **Seller wizard** ([web/](web/)): runs in the browser, nothing to install. On a Mac the seller pastes the output of a read-only Terminal command. On an iPad or iPhone the battery values come from Settings or from the system analytics file. The data is self-reported, so it is **not an authenticated measurement**.
+2. **Receiving program** ([tool/](tool/), [web/receiver/](web/receiver/)): runs on the buyer's computer and reads the iPad over USB (`pymobiledevice3`). This is the authenticated measurement, because the data comes from the device itself, not from the seller's browser.
 
 Data path in seller mode: browser, Google Apps Script, email to the buyer.
 
@@ -48,12 +48,19 @@ Data path in seller mode: browser, Google Apps Script, email to the buyer.
 
 ## Development
 
+Tests for the in-browser readers:
+
 ```
-node --test tests/seller_parse.test.js       # tests for the in-browser readers
-python3 -m http.server 8000 --directory web   # local preview: http://localhost:8000/seller/#DEMO
+node --test tests/seller_parse.test.js
 ```
 
-`#DEMO` is a trial mode: the Send button sends nothing and shows what would have been sent. In a live link the 12-character invite code follows the `#`.
+Local preview:
+
+```
+python3 -m http.server 8000 --directory web
+```
+
+The page then opens at `http://localhost:8000/`. Typing `DEMO` into the invite code field starts a trial mode: the Send button sends nothing and shows what would have been sent. The seller opens the plain address and types the 9-digit invite code on the first screen. A `#CODE` appended to the address only prefills the field.
 
 Dependencies of the Python part: [requirements.txt](requirements.txt). Tests: [tests/test_core.py](tests/test_core.py).
 

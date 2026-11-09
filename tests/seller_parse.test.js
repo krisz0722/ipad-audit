@@ -4,7 +4,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const crypto = require('node:crypto');
-const P = require('../web/seller/parse.js');
+const P = require('../web/parse.js');
 
 test('sha256Hex egyezik a Node crypto eredményével', () => {
   const inputs = ['', 'abc', 'a'.repeat(55), 'a'.repeat(56), 'a'.repeat(63), 'a'.repeat(64), 'a'.repeat(200), 'árvíztűrő tükörfúrógép'];

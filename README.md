@@ -20,9 +20,9 @@ Az eladó minden adatot előbb lát egy előnézetben, és csak a **Küldés** g
 
 ### Hogyan ellenőrizheted?
 
-- [web/seller/parse.js](web/seller/parse.js): a kiolvasók. Csak előre felsorolt mezőket olvasnak, minden más adat figyelmen kívül marad. Itt készül a sorozatszám lenyomata és a riport szerkezete is.
-- [web/seller/seller.js](web/seller/seller.js): a varázsló. Hálózati kérés kizárólag a `send()` függvényben van, a Küldés gomb után.
-- [web/seller/index.html](web/seller/index.html): az oldal harmadik fél scriptjét nem tölti be, csak a saját fájljait.
+- [web/parse.js](web/parse.js): a kiolvasók. Csak előre felsorolt mezőket olvasnak, minden más adat figyelmen kívül marad. Itt készül a sorozatszám lenyomata és a riport szerkezete is.
+- [web/seller.js](web/seller.js): a varázsló. Hálózati kérés kizárólag a `send()` függvényben van, a Küldés gomb után.
+- [web/index.html](web/index.html): az oldal harmadik fél scriptjét nem tölti be, csak a saját fájljait.
 - [backend/Code.gs](backend/Code.gs): a fogadó Google Apps Script. Meghívó nélkül semmit nem fogad el, a Táblában csak kódot, címkét, lejáratot és állapotot tárol, az eredményt emailben küldi.
 
 Az Apps Script telepített változata nem ellenőrizhető kívülről, csak a repóban lévő fájl.
@@ -35,8 +35,8 @@ A riportban alapból csak a `SHA-256(meghívókód + ":" + sorozatszám)` első 
 
 Két mód van:
 
-1. **Eladói varázsló** ([web/seller/](web/seller/)): böngészőben fut, telepítés nélkül. A Mac-nál az eladó egy csak olvasó Terminál-parancs kimenetét illeszti be, iPaden/iPhone-on az akkuadatot a Beállításokból vagy a rendszer analitikai fájljából adja meg. Az adatok az eladó saját bevallásán alapulnak, ezért **nem hitelesített mérésnek** számítanak.
-2. **Átvételi program** ([tool/](tool/), [web/app.js](web/app.js)): a vásárló számítógépén fut, USB-n olvassa ki az iPad adatait (`pymobiledevice3`). Ez a hitelesített mérés, mert az adatot a készülék adja, nem az eladó böngészője.
+1. **Eladói varázsló** ([web/](web/)): böngészőben fut, telepítés nélkül. A Mac-nál az eladó egy csak olvasó Terminál-parancs kimenetét illeszti be, iPaden/iPhone-on az akkuadatot a Beállításokból vagy a rendszer analitikai fájljából adja meg. Az adatok az eladó saját bevallásán alapulnak, ezért **nem hitelesített mérésnek** számítanak.
+2. **Átvételi program** ([tool/](tool/), [web/receiver/](web/receiver/)): a vásárló számítógépén fut, USB-n olvassa ki az iPad adatait (`pymobiledevice3`). Ez a hitelesített mérés, mert az adatot a készülék adja, nem az eladó böngészője.
 
 Adatút az eladói módban: böngésző, Google Apps Script, email a vásárlónak.
 
@@ -48,12 +48,19 @@ Adatút az eladói módban: böngésző, Google Apps Script, email a vásárlón
 
 ## Fejlesztés
 
+A böngészős kiolvasók tesztje:
+
 ```
-node --test tests/seller_parse.test.js       # a böngészős kiolvasók tesztje
-python3 -m http.server 8000 --directory web   # helyi kipróbálás: http://localhost:8000/seller/#DEMO
+node --test tests/seller_parse.test.js
 ```
 
-A `#DEMO` próbaüzem: a Küldés gomb nem küld el semmit, hanem megmutatja, mi ment volna el. Éles linkben a `#` után a 12 karakteres meghívókód áll.
+Helyi kipróbálás:
+
+```
+python3 -m http.server 8000 --directory web
+```
+
+Ezután a `http://localhost:8000/` címen nyílik meg az oldal. A meghívókód mezőbe a `DEMO` szót írva próbaüzem indul: a Küldés gomb nem küld el semmit, hanem megmutatja, mi ment volna el. Az eladó a sima címet nyitja meg, és a 9 számjegyű meghívókódot a nyitóoldalon írja be. A címhez fűzött `#KÓD` csak előtölti a mezőt.
 
 A Python rész függőségei: [requirements.txt](requirements.txt). A tesztek: [tests/test_core.py](tests/test_core.py).
 

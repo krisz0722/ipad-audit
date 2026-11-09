@@ -18,4 +18,4 @@ Setting: `both` (allowed values: `en`, `hu`, `both`).
 
 - Never commit real device data (serial numbers, UDIDs, IMEIs, MAC addresses) or personal email addresses. Use obviously fake values in tests.
 - Never commit secrets or `.env` files.
-- The seller page must only read the fixed list of fields in `web/seller/parse.js`, and must only make a network request in `send()` in `web/seller/seller.js`, after the seller's explicit consent. If you change what is read or sent, update the tables in both READMEs.
+- The seller page must only read the fixed list of fields in `web/parse.js`, and must only make a network request in `send()` in `web/seller.js`, after the seller's explicit consent. If you change what is read or sent, update the tables in both READMEs.

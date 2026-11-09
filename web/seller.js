@@ -1,4 +1,4 @@
-// Az eladói varázsló. Független a tesztoldal régi, USB-s folyamatától (../app.js).
+// Az eladói varázsló. Független az átvételi oldal USB-s folyamatától (receiver/app.js).
 // Minden adat a böngészőben marad, amíg az eladó a végén meg nem nyomja a Küldés gombot.
 (function () {
   'use strict';
@@ -7,7 +7,8 @@
   var app = document.getElementById('app');
   var hash = (location.hash || '').replace('#', '').trim().toUpperCase();
   var DEMO = hash === 'DEMO';
-  var CODE = /^[0-9A-Z]{12}$/.test(hash) ? hash : '';
+  var CODE_PATTERN = /^(?:[0-9]{9}|[0-9A-Z]{12})$/;
+  var CODE = CODE_PATTERN.test(hash) ? hash : '';
   var MAX_FILE = 50 * 1024 * 1024;
 
   // Csak olvas, nem ír, nem csatlakozik a hálózatra. A profiles kimenetéből csak a két igen/nem sor jön át,
@@ -124,13 +125,19 @@
 
   /* ---------- képernyők ---------- */
 
-  function invalid() {
-    show(top() + '<h1>Hibás vagy hiányos link</h1>' +
-      '<p class="lead">Ehhez az oldalhoz a vásárlótól kapott teljes linkre van szükség. Kérd tőle újra.</p>');
+  function begin() {
+    var typed = $('code') ? $('code').value : '';
+    var text = String(typed).toUpperCase().replace(/[^0-9A-Z]/g, '');
+    if (text === 'DEMO') { DEMO = true; CODE = ''; kind(); return; }
+    if (!CODE_PATTERN.test(text)) {
+      message('msg', '<div class="error">A meghívókód 9 számjegyből áll. Ellenőrizd, hogy pontosan úgy írtad-e be, ahogy kaptad.</div>');
+      return;
+    }
+    DEMO = false; CODE = text;
+    kind();
   }
 
   function welcome() {
-    if (!CODE && !DEMO) { invalid(); return; }
     show(top() +
       '<h1>Az eszközöd állapotának ellenőrzése</h1>' +
       '<p class="lead">A vásárló szeretné látni az akkumulátor és az alapadatok állapotát, mielőtt megveszi az eszközt. Ez az oldal lépésről lépésre végigvezet rajta. Kb. 5 percet vesz igénybe, és nem kell semmit telepítened.</p>' +
@@ -156,12 +163,21 @@
         '<li><b>Te döntesz.</b> Minden adatot előbb te látsz, és csak akkor megy el bármi, ha a végén te nyomod meg a Küldés gombot.</li>' +
         '<li><b>Nem módosítunk semmit.</b> Az oldal nem telepít programot, és nem változtat az eszközödön.</li>' +
         '<li><b>Egyetlen címzett.</b> Az adatok egy emailben mennek el a vásárlónak. Az oldal nem tárol belőlük másolatot.</li>' +
-        '<li><b>Nyílt forráskód.</b> Az oldal teljes kódja nyilvános, bárki ellenőrizheti, mit csinál: <a href="https://gitlab.com/krisz0722/ipad-audit/-/tree/main/web/seller" target="_blank" rel="noopener">forráskód megtekintése</a>.</li>' +
+        '<li><b>Nyílt forráskód.</b> Az oldal teljes kódja nyilvános, bárki ellenőrizheti, mit csinál: <a href="https://gitlab.com/krisz0722/ipad-audit/-/tree/main/web" target="_blank" rel="noopener">forráskód megtekintése</a>.</li>' +
         '<li><b>Bármikor kiléphetsz.</b> Ha meggondolod magad, zárd be az oldalt. Addig nem történik semmi.</li>' +
       '</ul>' +
       '<div class="note"><b>Fontos:</b> ezt az oldalt azon az eszközön nyisd meg, amelyet eladsz.</div>' +
+      '<h2>Meghívókód</h2>' +
+      '<p>Írd be a vásárlótól kapott 9 számjegyű kódot. A szóköz és a kötőjel nem számít.</p>' +
+      '<label class="field">Meghívókód<input type="text" id="code" value="' + esc(DEMO ? 'DEMO' : CODE) + '" placeholder="Például: 123 456 789" maxlength="24" inputmode="numeric" autocomplete="off" spellcheck="false"></label>' +
+      '<div id="msg"></div>' +
       '<button type="button" class="btn" id="start">Rendben, kezdjük</button>');
-    on('start', kind);
+    on('start', begin);
+    $('code').addEventListener('keydown', function (event) { if (event.key === 'Enter') begin(); });
+    $('code').addEventListener('input', function () {
+      var digits = this.value.replace(/\D/g, '');
+      if (digits.length === this.value.replace(/[\s-]/g, '').length) this.value = digits.replace(/(\d{3})(?=\d)/g, '$1 ');
+    });
   }
 
   function kind() {
