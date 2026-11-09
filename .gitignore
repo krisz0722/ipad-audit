@@ -7,3 +7,9 @@ build/
 *.spec
 ipad-audit-*.md
 .DS_Store
+node_modules/
+.env
+.env.*
+*.pem
+*.key
+*.bundle
