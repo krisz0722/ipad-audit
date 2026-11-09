@@ -410,6 +410,20 @@
 
   /* ---------- képernyők ---------- */
 
+  // A riport szakaszainak táblázata. Az előnézet és a nyitóoldali példa is ezt használja, ezért a kettő nem térhet el.
+  function sectionsHtml(sections) {
+    var html = '';
+    for (var s = 0; s < sections.length; s++) {
+      html += '<h2>' + esc(sections[s].title) + '</h2><div class="tablewrap"><table><thead><tr><th>Adat</th><th>Érték</th><th>Forrás</th></tr></thead><tbody>';
+      for (var r = 0; r < sections[s].rows.length; r++) {
+        var row = sections[s].rows[r];
+        html += '<tr><td>' + esc(row.label) + '</td><td>' + esc(row.value) + '</td><td>' + esc(row.tag) + '</td></tr>';
+      }
+      html += '</tbody></table></div>';
+    }
+    return html;
+  }
+
   function begin() {
     var typed = $('code') ? $('code').value : '';
     var text = String(typed).toUpperCase().replace(/[^0-9A-Z]/g, '');
@@ -423,6 +437,11 @@
   }
 
   SCREENS.welcome = function () {
+    var example = window.SellerExample
+      ? '<details class="example"><summary>Példa: ilyen riportot kapsz a végén (kitalált adatokkal)</summary>' +
+        '<p class="muted">Ez egy kitalált példa. A te riportod az előnézetben pontosan így fog kinézni, a te adataiddal, és csak a Küldés gomb után megy el.</p>' +
+        sectionsHtml(P.buildSections(window.SellerExample.data)) + '</details>'
+      : '';
     show(top() +
       '<h1>Az eszközöd állapotának ellenőrzése</h1>' +
       '<p class="lead">A vásárló szeretné látni az akkumulátor és az alapadatok állapotát, mielőtt megveszi az eszközt. Ez az oldal lépésről lépésre végigvezet rajta. Kb. 10 percet vesz igénybe, és nem kell semmit telepítened.</p>' +
@@ -443,6 +462,7 @@
           '<li>IMEI, eszköznév, helyadat, Wi-Fi hálózatok</li>' +
         '</ul></div>' +
       '</div>' +
+      example +
       '<h2>Hogyan védjük az adataidat?</h2>' +
       '<ul class="plain">' +
         '<li><b>Te döntesz.</b> Minden adatot előbb te látsz, és csak akkor megy el bármi, ha a végén te nyomod meg a Küldés gombot.</li>' +
@@ -1123,14 +1143,7 @@
     if (d.cycles === null && d.capacity === null) {
       html += '<div class="note warn">Nem adtál meg akkumulátor adatot. A vásárló ezt hiányként fogja látni.</div>';
     }
-    for (var s = 0; s < sections.length; s++) {
-      html += '<h2>' + esc(sections[s].title) + '</h2><div class="tablewrap"><table><thead><tr><th>Adat</th><th>Érték</th><th>Forrás</th></tr></thead><tbody>';
-      for (var r = 0; r < sections[s].rows.length; r++) {
-        var row = sections[s].rows[r];
-        html += '<tr><td>' + esc(row.label) + '</td><td>' + esc(row.value) + '</td><td>' + esc(row.tag) + '</td></tr>';
-      }
-      html += '</tbody></table></div>';
-    }
+    html += sectionsHtml(sections);
     html += (DEMO ? '<div class="note">Próbaüzemben a Küldés gomb nem küld el semmit.</div>' : '') +
       '<label class="check"><input type="checkbox" id="consent"> Elolvastam, és beleegyezem, hogy ezek az adatok elmenjenek a vásárlónak.</label>' +
       '<div id="msg"></div>' +

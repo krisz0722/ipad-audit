@@ -6,6 +6,8 @@ Használt iPad, iPhone és Mac vásárlásához készült ellenőrző eszköz. A
 
 A kód nyilvános, hogy az eladó (és bárki) megnézhesse, pontosan mit olvas ki az oldal, és mit küld el.
 
+**Példa riport:** [docs/example-report.md](docs/example-report.md). Kitalált adatokkal készült, ugyanabból a kódból, mint az éles riport, és egy teszt őrzi, hogy mindig megegyezzen vele.
+
 ## Eladóknak: mit olvas ki az oldal?
 
 | Kiolvassuk | Soha nem olvassuk |

@@ -99,3 +99,6 @@ a.btn { text-decoration: none; }
 #touch-skip { position: fixed; left: 50%; bottom: 16px; margin-left: -50px; z-index: 52; }
 #color { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
 #colorbar { position: absolute; left: 0; right: 0; bottom: 18px; text-align: center; }
+
+details.example { margin: 18px 0; }
+details.example summary { font-size: 18px; }
