@@ -38,6 +38,8 @@ Két mód van:
 1. **Eladói varázsló** ([web/](web/)): böngészőben fut, telepítés nélkül. A Mac-nál az eladó egy csak olvasó Terminál-parancs kimenetét illeszti be, iPaden/iPhone-on az akkuadatot a Beállításokból vagy a rendszer analitikai fájljából adja meg. Az adatok az eladó saját bevallásán alapulnak, ezért **nem hitelesített mérésnek** számítanak.
 2. **Átvételi program** ([tool/](tool/), [web/receiver/](web/receiver/)): a vásárló számítógépén fut, USB-n olvassa ki az iPad adatait (`pymobiledevice3`). Ez a hitelesített mérés, mert az adatot a készülék adja, nem az eladó böngészője.
 
+Az oldal az eladót semmire nem kéri, hogy bekapcsoljon az eszközén, és semmit nem küld az Apple-nek. Ha az eszközön nincs az akkumulátor adatát tartalmazó napló, az eladó ezt egy gombbal jelzi, és a riportban az akku adata "USB-s méréssel pótlandó" jelölést kap: ilyenkor az eladó a saját számítógépére kötve méri meg az eszközt.
+
 Adatút az eladói módban: böngésző, Google Apps Script, email a vásárlónak.
 
 ## Állapot

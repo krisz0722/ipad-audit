@@ -173,9 +173,10 @@
     ];
     if (d.serialRaw) device.push(row('Sorozatszám', d.serialRaw, 'info', 'az eladó megosztotta'));
 
+    var deferText = (d.batteryDefer && d.cycles === null && d.capacity === null) ? 'nincs napló, USB-s méréssel pótlandó (az eladó számítógépén)' : '';
     var battery = [
-      row('Ciklusszám', d.cycles === null ? '' : d.cycles, 'info', src.cycles),
-      row('Maximális kapacitás', d.capacity === null ? '' : d.capacity + '%', 'info', src.capacity),
+      row('Ciklusszám', d.cycles === null ? deferText : d.cycles, 'info', src.cycles),
+      row('Maximális kapacitás', d.capacity === null ? deferText : d.capacity + '%', 'info', src.capacity),
       row('Akkumulátor állapota', d.condition, /^(normal|good)$/i.test(d.condition || '') ? 'ok' : 'warn', src.condition)
     ];
     if (d.fileDate) battery.push(row('Az analitikai fájl kelte', d.fileDate, 'info', 'fájlból'));

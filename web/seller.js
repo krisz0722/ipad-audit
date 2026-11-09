@@ -26,7 +26,7 @@
     vals: { model: '', storage: '', os: '', memory: '', chip: '', serial: '', cycles: '', capacity: '' },
     parsed: {},
     extra: { condition: '', fileDate: '', activationLock: '', dep: null, mdm: null, modelId: '' },
-    shareSerial: false, apple: '', sid: '', sending: false
+    shareSerial: false, apple: '', sid: '', sending: false, noLog: false
   };
 
   /* ---------- segédek ---------- */
@@ -106,7 +106,6 @@
     legacy: {
       paste: true, batteryScreen: false,
       path: '<b>Beállítások &gt; Adatvédelem</b>, majd a lista legalján a <b>Diagn. és használat</b> sor',
-      toggle: 'Ha az <b>Automatikus küldés</b> helyett a <b>Küldés mellőzése</b> van kipipálva, válaszd az <b>Automatikus küldés</b> lehetőséget.',
       list: 'Koppints a <b>Diag. és használati adatok</b> sorra. A lista betűrendben van, keresd a <b>log-aggregated-...</b> kezdetű bejegyzést (az l betűnél), és válaszd a legfrissebb dátumút.',
       model: 'Beállítások &gt; Általános &gt; Névjegy &gt; Modell. Itt egy kódot látsz (például MD328HC/A), azt is beírhatod.',
       version: 'Beállítások &gt; Általános &gt; Névjegy &gt; Verzió.',
@@ -115,7 +114,6 @@
     mid: {
       paste: true, batteryScreen: true,
       path: '<b>Beállítások &gt; Adatvédelem &gt; Elemzés</b> (Analytics)',
-      toggle: 'Ha az <b>iPad / iPhone elemzésének megosztása</b> (Share iPad Analytics) ki van kapcsolva, kapcsold be.',
       list: 'Koppints az <b>Elemzési adatok</b> (Analytics Data) pontra, és keresd meg a legfrissebb <b>log-aggregated-...</b> nevű bejegyzést.',
       model: 'Beállítások &gt; Általános &gt; Névjegy &gt; Típusnév vagy Modell.',
       version: 'Beállítások &gt; Általános &gt; Névjegy &gt; Verzió.',
@@ -124,7 +122,6 @@
     modern: {
       paste: false, batteryScreen: true,
       path: '<b>Beállítások &gt; Adatvédelem &gt; Elemzések és fejlesztések</b>',
-      toggle: 'Ha az <b>iPad / iPhone elemzésének megosztása</b> ki van kapcsolva, kapcsold be.',
       list: 'Koppints az <b>Elemzési adatok</b> pontra, és keresd meg a legfrissebb <b>Analytics-...</b> kezdetű fájlt.',
       model: 'Beállítások &gt; Általános &gt; Névjegy &gt; Típusnév.',
       version: 'Beállítások &gt; Általános &gt; Névjegy &gt; Szoftververzió.',
@@ -133,7 +130,6 @@
     latest: {
       paste: false, batteryScreen: true,
       path: '<b>Beállítások &gt; Adatvédelem és biztonság &gt; Elemzések és fejlesztések</b>',
-      toggle: 'Ha az <b>iPad / iPhone elemzésének megosztása</b> ki van kapcsolva, kapcsold be.',
       list: 'Koppints az <b>Elemzési adatok</b> pontra, és keresd meg a legfrissebb <b>Analytics-...</b> kezdetű fájlt.',
       model: 'Beállítások &gt; Általános &gt; Névjegy &gt; Típusnév.',
       version: 'Beállítások &gt; Általános &gt; Névjegy &gt; Szoftververzió.',
@@ -187,7 +183,7 @@
       fingerprint: P.fingerprint(CODE || 'DEMO00000000', serial),
       serialTail: serial ? serial.slice(-4) : '',
       serialRaw: state.shareSerial && serial ? serial : '',
-      cycles: toInt(v.cycles, 0, 5000), capacity: toInt(v.capacity, 40, 100),
+      cycles: toInt(v.cycles, 0, 5000), capacity: toInt(v.capacity, 40, 100), batteryDefer: !!state.noLog,
       condition: e.condition, fileDate: e.fileDate,
       apple: state.apple, activationLock: e.activationLock, dep: e.dep, mdm: e.mdm,
       sources: {
@@ -298,18 +294,12 @@
     return '<div class="card"><label class="field">Rendszerverzió<select id="osfam">' + options + '</select><small>' + note + '</small></label></div>';
   }
 
-  function shareNote(s) {
-    return ' Ez névtelen használati adatot küld az Apple-nek, később visszakapcsolhatod. A ' + (s.paste ? 'napló' : 'fájl') +
-      ' legfeljebb egy nap múlva jelenik meg. Akkor térj vissza erre az oldalra, a link a kiküldéstől számított 72 óráig érvényes.';
-  }
-
   function pasteSteps(s) {
     return '<h2>Az akkumulátor adatai a rendszernaplóból</h2>' +
-      '<p>Az eszköz a ciklusszámot egy diagnosztikai naplóban tárolja. Ezt a naplót másolod ide, az oldal csak ezen az eszközön olvassa ki belőle a ciklusszámot és a kapacitást.</p>' +
+      '<p>Az eszköz a ciklusszámot egy diagnosztikai naplóban tárolja. Ezt a naplót másolod ide, az oldal csak ezen az eszközön olvassa ki belőle a ciklusszámot és a kapacitást. Csak akkor folytasd, ha az eszközön már van ilyen napló. Ha nincs, ne kapcsolj be semmit: jelezd lent, és az akkumulátor adatát USB-kábellel, egy számítógépen futó kis programmal olvassuk ki.</p>' +
       '<ol class="steps">' +
         '<li>Nyisd meg: ' + s.path + '.</li>' +
-        '<li>' + s.toggle + shareNote(s) + '</li>' +
-        '<li>' + s.list + '</li>' +
+        '<li>' + s.list + '<br><button type="button" class="link" id="no-log">Nincs ilyen bejegyzés</button></li>' +
         '<li>Érintsd meg hosszan a szöveget, válaszd a <b>Mindet kijelöl</b> (Select All), majd a <b>Másolás</b> (Copy) lehetőséget.</li>' +
         '<li>Térj vissza ide, érintsd meg hosszan az alábbi mezőt, válaszd a <b>Beillesztés</b> (Paste) lehetőséget, majd koppints a Beolvasás gombra:' +
           '<label class="field"><textarea id="paste" placeholder="Ide illeszd be a napló szövegét" spellcheck="false"></textarea></label>' +
@@ -321,11 +311,10 @@
 
   function fileSteps(s) {
     return '<h2>Az akkumulátor adatai a rendszerfájlból</h2>' +
-      '<p>Az eszköz a ciklusszámot egy analitikai fájlban tárolja. Ezt a fájlt választod ki az oldalon. Az oldal csak ezen az eszközön olvassa, nem tölti fel.</p>' +
+      '<p>Az eszköz a ciklusszámot egy analitikai fájlban tárolja. Ezt a fájlt választod ki az oldalon. Az oldal csak ezen az eszközön olvassa, nem tölti fel. Csak akkor folytasd, ha az eszközön már van ilyen fájl. Ha nincs, ne kapcsolj be semmit: jelezd lent, és az akkumulátor adatát USB-kábellel, egy számítógépen futó kis programmal olvassuk ki.</p>' +
       '<ol class="steps">' +
         '<li>Nyisd meg: ' + s.path + '.</li>' +
-        '<li>' + s.toggle + shareNote(s) + '</li>' +
-        '<li>' + s.list + '</li>' +
+        '<li>' + s.list + '<br><button type="button" class="link" id="no-log">Nincs ilyen bejegyzés</button></li>' +
         '<li>Nyisd meg, koppints a <b>Megosztás</b> gombra, majd a <b>Mentés a Fájlokba</b> pontra.</li>' +
         '<li>Térj vissza ide, és válaszd ki a mentett fájlt:<br><input type="file" id="file"></li>' +
       '</ol>' +
@@ -368,12 +357,23 @@
       applyIpadText(area ? area.value : '');
       if (area) area.value = '';
     });
+    on('no-log', function () {
+      state.noLog = true; state.parsed = {};
+      state.vals.cycles = ''; state.vals.capacity = '';
+      save();
+      if ($('cycles')) $('cycles').value = '';
+      if ($('capacity')) $('capacity').value = '';
+      message('fileResult', '<div class="note">Rendben, nem kell semmit bekapcsolnod. Ennél az eszköznél az akkumulátor adatát egy USB-kábellel a számítógépre kötött kis program tudja kiolvasni. Ehhez a vevő külön útmutatót ad. A többi adatot addig is kitöltheted.</div>' +
+        '<button type="button" class="btn" id="no-log-next">Tovább</button>');
+      on('no-log-next', details);
+    });
   }
 
   function applyIpadText(text) {
     var r = P.parseIpadFile(String(text));
     var what = current().paste ? 'szöveg' : 'fájl';
     state.parsed = {};
+    state.noLog = false;
     if (r.cycles !== null) { state.parsed.cycles = String(r.cycles); state.vals.cycles = String(r.cycles); }
     if (r.capacity !== null) { state.parsed.capacity = String(r.capacity); state.vals.capacity = String(r.capacity); }
     if (r.os) { state.parsed.os = r.os; state.vals.os = r.os; }
@@ -602,9 +602,6 @@
     var html = top() + '<h1>Köszönjük!</h1>' +
       '<div class="success">Az adatok elmentek a vásárlónak. Az oldalt bezárhatod.</div>' +
       '<p>Ezen az eszközön nem tároltunk semmit.</p>';
-    if (state.route === 'file') {
-      html += '<p>Ha az elemzés megosztását csak ehhez kapcsoltad be, a Beállításokban visszakapcsolhatod: ' + current().path + '.</p>';
-    }
     if (DEMO) {
       html += '<details><summary>Ezt küldtük volna (próbaüzem)</summary><pre class="code">' + esc(JSON.stringify(sections, null, 2)) + '</pre></details>';
     }

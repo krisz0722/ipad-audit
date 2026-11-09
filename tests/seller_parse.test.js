@@ -170,3 +170,13 @@ test('detectOs: iPadOS asztali módban és Mac', () => {
   assert.strictEqual(P.detectOs(desktop, 0), null);
   assert.strictEqual(P.detectOs('', 0), null);
 });
+
+test('buildSections: az átvételkor mérendő akku külön jelölést kap', () => {
+  const deferred = P.buildSections(sampleData({ cycles: null, capacity: null, batteryDefer: true }))[1].rows;
+  assert.match(deferred[0].value, /USB-s méréssel pótlandó/);
+  assert.strictEqual(deferred[0].status, 'info');
+  const plain = P.buildSections(sampleData({ cycles: null, capacity: null }))[1].rows;
+  assert.strictEqual(plain[0].value, 'nem adta meg');
+  const measured = P.buildSections(sampleData({ cycles: 244, capacity: 85, batteryDefer: true }))[1].rows;
+  assert.strictEqual(measured[0].value, '244');
+});

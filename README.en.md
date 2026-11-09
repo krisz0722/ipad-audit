@@ -38,6 +38,8 @@ There are two modes:
 1. **Seller wizard** ([web/](web/)): runs in the browser, nothing to install. On a Mac the seller pastes the output of a read-only Terminal command. On an iPad or iPhone the battery values come from Settings or from the system analytics file. The data is self-reported, so it is **not an authenticated measurement**.
 2. **Receiving program** ([tool/](tool/), [web/receiver/](web/receiver/)): runs on the buyer's computer and reads the iPad over USB (`pymobiledevice3`). This is the authenticated measurement, because the data comes from the device itself, not from the seller's browser.
 
+The page never asks the seller to switch anything on and sends nothing to Apple. If the device has no log with the battery data, the seller says so with one button, and the report marks the battery data as "to be completed with a USB measurement": the seller then connects the device to their own computer and measures it there.
+
 Data path in seller mode: browser, Google Apps Script, email to the buyer.
 
 ## Status
