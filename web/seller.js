@@ -521,14 +521,18 @@
         '<pre class="code" id="mac-cmd">' + esc(macDownloadCommand()) + '</pre>' +
         '<button type="button" class="btn small" id="copy-mac">Parancs másolása</button><span class="muted" id="copied-mac"></span></div>';
     }
+    var trust = '<div class="note"><b>Miért megbízható ez a program?</b><ul class="marks yes">' +
+      '<li><b>Nyílt forráskód.</b> A program teljes kódja nyilvános, bárki elolvashatja: ' +
+        '<a href="https://github.com/krisz0722/ipad-audit/blob/main/tool/ipad_audit/reader.py" target="_blank" rel="noopener">a GitHubon</a> és ' +
+        '<a href="https://gitlab.com/krisz0722/ipad-audit/-/blob/main/tool/ipad_audit/reader.py" target="_blank" rel="noopener">a GitLabon</a>.</li>' +
+      '<li><b>Csak olvas.</b> Semmit nem módosít az eszközön.</li>' +
+      '<li><b>Nem küld el semmit.</b> A program saját kódjában nincs internetes kapcsolat, ezt egy automatikus teszt őrzi. Az eredményt te másolod be ide, és az előnézetben látod, mi megy tovább.</li>' +
+      '<li><b>Ellenőrizhető letöltés.</b> A fájlt a GitHub építi a nyilvános kódból (<a href="https://github.com/krisz0722/ipad-audit/actions" target="_blank" rel="noopener">a build naplója</a>), ' +
+        'a <a href="https://github.com/krisz0722/ipad-audit/releases/latest" target="_blank" rel="noopener">kiadás oldalán</a> minden fájl mellett ott az ellenőrző összeg (.sha256).</li>' +
+      '</ul></div>';
     show(top() + progress(2) +
-      '<h1>A kiolvasó program letöltése</h1>' +
+      '<h1>A kiolvasó program letöltése</h1>' + trust +
       '<p class="lead">Töltsd le a számítógépedre a megfelelő fájlt:</p>' + buttons + notes +
-      '<div class="card"><h3>Mit csinál a program?</h3><ul class="marks yes">' +
-        '<li>Csak olvas, semmit nem módosít az eszközön.</li>' +
-        '<li>Nem csatlakozik az internetre, és semmit nem küld el.</li>' +
-        '<li>Egy rövid szöveget ír ki, és a vágólapra másolja. Te másolod be ide, és az előnézetben látod, mi megy tovább.</li>' +
-      '</ul></div>' +
       foot('u-next', 'Letöltöttem, tovább'));
     on('u-next', function () { go('usb_run'); });
     on('copy-mac', function () {
