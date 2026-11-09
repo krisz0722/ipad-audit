@@ -19,9 +19,16 @@
 
   function rotr(x, n) { return (x >>> n) | (x << (32 - n)); }
 
+  // Kézi UTF-8, mert a TextEncoder a régi (iOS 9, 10) Safariban nincs meg.
+  function utf8Bytes(text) {
+    var binary = unescape(encodeURIComponent(String(text))), bytes = [];
+    for (var i = 0; i < binary.length; i++) bytes.push(binary.charCodeAt(i));
+    return bytes;
+  }
+
   // Tiszta JS SHA-256, mert a crypto.subtle csak biztonságos (HTTPS) környezetben érhető el.
   function sha256Hex(text) {
-    var bytes = Array.prototype.slice.call(new TextEncoder().encode(String(text)));
+    var bytes = utf8Bytes(text);
     var bitLength = bytes.length * 8;
     bytes.push(0x80);
     while (bytes.length % 64 !== 56) bytes.push(0);
@@ -192,8 +199,31 @@
     ];
   }
 
+  // A böngésző azonosítójából felismeri az iOS/iPadOS verziót. Az iPadOS 13 felett az iPad
+  // alapból asztali Safarinak hazudja magát, ilyenkor az érintési pontok száma és a Safari verziója segít.
+  function detectOs(userAgent, touchPoints) {
+    var ua = String(userAgent || ''), device = '', major, minor, patch;
+    var m = /\b(iPhone|iPad|iPod)\b[^)]*?\bOS (\d+)[_.](\d+)(?:[_.](\d+))?/.exec(ua);
+    if (m) {
+      device = m[1];
+      major = parseInt(m[2], 10); minor = parseInt(m[3], 10); patch = m[4] === undefined ? 0 : parseInt(m[4], 10);
+    } else if (/Macintosh/.test(ua) && touchPoints > 1) {
+      var v = /\bVersion\/(\d+)(?:\.(\d+))?(?:\.(\d+))?/.exec(ua);
+      if (!v) return null;
+      device = 'iPad';
+      major = parseInt(v[1], 10); minor = v[2] === undefined ? 0 : parseInt(v[2], 10); patch = v[3] === undefined ? 0 : parseInt(v[3], 10);
+    } else {
+      return null;
+    }
+    return {
+      device: device, major: major,
+      version: major + '.' + minor + (patch ? '.' + patch : ''),
+      name: device === 'iPad' && major >= 13 ? 'iPadOS' : 'iOS'
+    };
+  }
+
   return {
     sha256Hex: sha256Hex, fingerprint: fingerprint, normalizeSerial: normalizeSerial, storageLabel: storageLabel,
-    parseIpadFile: parseIpadFile, parseMacOutput: parseMacOutput, buildSections: buildSections
+    parseIpadFile: parseIpadFile, parseMacOutput: parseMacOutput, buildSections: buildSections, detectOs: detectOs
   };
 });

@@ -147,3 +147,26 @@ test('buildSections: zárak státusza', () => {
   assert.strictEqual(locks[1].status, 'bad');
   assert.strictEqual(locks[2].status, 'bad');
 });
+
+test('detectOs: iOS 9.3.5 iPad', () => {
+  const ua = 'Mozilla/5.0 (iPad; CPU OS 9_3_5 like Mac OS X) AppleWebKit/601.1.46 (KHTML, like Gecko) Version/9.0 Mobile/13G36 Safari/601.1';
+  const r = P.detectOs(ua, 5);
+  assert.strictEqual(r.version, '9.3.5');
+  assert.strictEqual(r.major, 9);
+  assert.strictEqual(r.name, 'iOS');
+  assert.strictEqual(r.device, 'iPad');
+});
+
+test('detectOs: iPhone és Chrome iOS-en', () => {
+  assert.strictEqual(P.detectOs('Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1', 5).version, '17.4');
+  assert.strictEqual(P.detectOs('Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/120.0 Mobile/15E148 Safari/604.1', 5).major, 16);
+});
+
+test('detectOs: iPadOS asztali módban és Mac', () => {
+  const desktop = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15';
+  const r = P.detectOs(desktop, 5);
+  assert.strictEqual(r.name, 'iPadOS');
+  assert.strictEqual(r.major, 17);
+  assert.strictEqual(P.detectOs(desktop, 0), null);
+  assert.strictEqual(P.detectOs('', 0), null);
+});

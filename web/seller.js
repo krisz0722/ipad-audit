@@ -21,6 +21,7 @@
     "df -k /System/Volumes/Data | tail -1";
 
   var state = {
+    step: '', osFamily: '', detectedOs: '',
     kind: '', route: '',
     vals: { model: '', storage: '', os: '', memory: '', chip: '', serial: '', cycles: '', capacity: '' },
     parsed: {},
@@ -52,6 +53,7 @@
     var title = app.querySelector('h1');
     if (title) { title.setAttribute('tabindex', '-1'); try { title.focus({ preventScroll: true }); } catch (e) { /* régi böngésző */ } }
     window.scrollTo(0, 0);
+    save();
   }
   function top() {
     return '<div class="top"><span class="brand">Eszköz-ellenőrzés</span>' +
@@ -94,11 +96,85 @@
     } else { fallback(); }
   }
 
+  /* ---------- rendszerverzió szerinti lépések ---------- */
+
+  // Az iOS 9 menünevei egy valódi, magyar nyelvű iPad mini fényképeiről vannak leolvasva. A többi rendszeré az Apple magyar
+  // oldalairól és magyar útmutatókból származik, valódi eszközön még ellenőrizendő.
+  var OS_LABELS = { legacy: 'iOS 9 vagy 10', mid: 'iOS 11 vagy 12', modern: 'iPadOS 13 vagy 14', latest: 'iPadOS 15 vagy újabb' };
+  var OS_ORDER = ['legacy', 'mid', 'modern', 'latest'];
+  var OS_STEPS = {
+    legacy: {
+      paste: true, batteryScreen: false,
+      path: '<b>Beállítások &gt; Adatvédelem</b>, majd a lista legalján a <b>Diagn. és használat</b> sor',
+      toggle: 'Ha az <b>Automatikus küldés</b> helyett a <b>Küldés mellőzése</b> van kipipálva, válaszd az <b>Automatikus küldés</b> lehetőséget.',
+      list: 'Koppints a <b>Diag. és használati adatok</b> sorra. A lista betűrendben van, keresd a <b>log-aggregated-...</b> kezdetű bejegyzést (az l betűnél), és válaszd a legfrissebb dátumút.',
+      model: 'Beállítások &gt; Általános &gt; Névjegy &gt; Modell. Itt egy kódot látsz (például MD328HC/A), azt is beírhatod.',
+      version: 'Beállítások &gt; Általános &gt; Névjegy &gt; Verzió.',
+      signout: 'Beállítások &gt; iCloud, legalul Kijelentkezés (Sign Out). iOS 10.3 vagy újabb rendszeren legfelül a neved, lent Kijelentkezés.'
+    },
+    mid: {
+      paste: true, batteryScreen: true,
+      path: '<b>Beállítások &gt; Adatvédelem &gt; Elemzés</b> (Analytics)',
+      toggle: 'Ha az <b>iPad / iPhone elemzésének megosztása</b> (Share iPad Analytics) ki van kapcsolva, kapcsold be.',
+      list: 'Koppints az <b>Elemzési adatok</b> (Analytics Data) pontra, és keresd meg a legfrissebb <b>log-aggregated-...</b> nevű bejegyzést.',
+      model: 'Beállítások &gt; Általános &gt; Névjegy &gt; Típusnév vagy Modell.',
+      version: 'Beállítások &gt; Általános &gt; Névjegy &gt; Verzió.',
+      signout: 'Beállítások, legfelül a neved, lent Kijelentkezés.'
+    },
+    modern: {
+      paste: false, batteryScreen: true,
+      path: '<b>Beállítások &gt; Adatvédelem &gt; Elemzések és fejlesztések</b>',
+      toggle: 'Ha az <b>iPad / iPhone elemzésének megosztása</b> ki van kapcsolva, kapcsold be.',
+      list: 'Koppints az <b>Elemzési adatok</b> pontra, és keresd meg a legfrissebb <b>Analytics-...</b> kezdetű fájlt.',
+      model: 'Beállítások &gt; Általános &gt; Névjegy &gt; Típusnév.',
+      version: 'Beállítások &gt; Általános &gt; Névjegy &gt; Szoftververzió.',
+      signout: 'Beállítások, legfelül a neved, lent Kijelentkezés.'
+    },
+    latest: {
+      paste: false, batteryScreen: true,
+      path: '<b>Beállítások &gt; Adatvédelem és biztonság &gt; Elemzések és fejlesztések</b>',
+      toggle: 'Ha az <b>iPad / iPhone elemzésének megosztása</b> ki van kapcsolva, kapcsold be.',
+      list: 'Koppints az <b>Elemzési adatok</b> pontra, és keresd meg a legfrissebb <b>Analytics-...</b> kezdetű fájlt.',
+      model: 'Beállítások &gt; Általános &gt; Névjegy &gt; Típusnév.',
+      version: 'Beállítások &gt; Általános &gt; Névjegy &gt; Szoftververzió.',
+      signout: 'Beállítások, legfelül a neved, lent Kijelentkezés.'
+    }
+  };
+
+  function familyOf(major) {
+    if (major <= 10) return 'legacy';
+    if (major <= 12) return 'mid';
+    if (major <= 14) return 'modern';
+    return 'latest';
+  }
+  function current() { return OS_STEPS[state.osFamily] || OS_STEPS.latest; }
+
+  /* ---------- állapotmentés: egy régi iPad a Beállításokból visszatérve gyakran újratölti a lapot ---------- */
+
+  var STORE_KEY = 'ipad-audit-seller-v1';
+  function save() {
+    try { sessionStorage.setItem(STORE_KEY, JSON.stringify({ demo: DEMO, code: CODE, state: state })); } catch (e) { /* privát mód: enélkül is működik */ }
+  }
+  function forget() {
+    try { sessionStorage.removeItem(STORE_KEY); } catch (e) { /* nem baj */ }
+  }
+  function restore() {
+    try {
+      var saved = JSON.parse(sessionStorage.getItem(STORE_KEY) || 'null');
+      if (!saved || !saved.state || !STEPS[saved.state.step] || saved.state.step === 'welcome') return false;
+      if (CODE && saved.code && CODE !== saved.code) return false;
+      DEMO = !!saved.demo; CODE = saved.code || '';
+      for (var key in saved.state) { if (Object.prototype.hasOwnProperty.call(saved.state, key)) state[key] = saved.state[key]; }
+      state.sending = false;
+      return true;
+    } catch (e) { return false; }
+  }
+
   /* ---------- az elküldendő adatok egyetlen helyen ---------- */
 
   function collect() {
     var v = state.vals, p = state.parsed, e = state.extra;
-    var origin = state.route === 'file' ? 'fájlból' : (state.route === 'command' ? 'parancsból' : 'beírta');
+    var origin = state.route === 'file' ? (current().paste ? 'naplóból' : 'fájlból') : (state.route === 'command' ? 'parancsból' : 'beírta');
     function src(key) {
       if (v[key] === '' || v[key] === null) return '';
       return p[key] !== undefined && String(p[key]) === String(v[key]) ? origin : 'beírta';
@@ -115,7 +191,8 @@
       condition: e.condition, fileDate: e.fileDate,
       apple: state.apple, activationLock: e.activationLock, dep: e.dep, mdm: e.mdm,
       sources: {
-        model: src('model'), chip: src('chip'), memory: src('memory'), storage: src('storage'), os: src('os'),
+        model: src('model'), chip: src('chip'), memory: src('memory'), storage: src('storage'),
+        os: (v.os && v.os === state.detectedOs) ? 'böngészőből' : src('os'),
         serial: src('serial'), cycles: src('cycles'), capacity: src('capacity'),
         condition: e.condition ? 'parancsból' : '', activationLock: e.activationLock ? 'parancsból' : '',
         mdm: (e.dep !== null || e.mdm !== null) ? 'parancsból' : ''
@@ -138,6 +215,7 @@
   }
 
   function welcome() {
+    state.step = 'welcome';
     show(top() +
       '<h1>Az eszközöd állapotának ellenőrzése</h1>' +
       '<p class="lead">A vásárló szeretné látni az akkumulátor és az alapadatok állapotát, mielőtt megveszi az eszközt. Ez az oldal lépésről lépésre végigvezet rajta. Kb. 5 percet vesz igénybe, és nem kell semmit telepítened.</p>' +
@@ -173,7 +251,7 @@
       '<div id="msg"></div>' +
       '<button type="button" class="btn" id="start">Rendben, kezdjük</button>');
     on('start', begin);
-    $('code').addEventListener('keydown', function (event) { if (event.key === 'Enter') begin(); });
+    $('code').addEventListener('keydown', function (event) { if (event.key === 'Enter' || event.keyCode === 13) begin(); });
     $('code').addEventListener('input', function () {
       var digits = this.value.replace(/\D/g, '');
       if (digits.length === this.value.replace(/[\s-]/g, '').length) this.value = digits.replace(/(\d{3})(?=\d)/g, '$1 ');
@@ -181,6 +259,7 @@
   }
 
   function kind() {
+    state.step = 'kind';
     show(top() + progress(1) +
       '<h1>Milyen eszközt adsz el?</h1>' +
       '<p>Ettől függ, hogyan olvassuk ki az akkumulátor adatait.</p>' +
@@ -192,7 +271,7 @@
     on('back', welcome);
   }
 
-  function data() { if (state.kind === 'mac') dataMac(); else dataIos(); }
+  function data() { state.step = 'data'; if (state.kind === 'mac') dataMac(); else dataIos(); }
 
   function batteryFields() {
     return '<div class="card">' +
@@ -208,29 +287,68 @@
     details();
   }
 
+  function osSelect() {
+    var options = '';
+    for (var i = 0; i < OS_ORDER.length; i++) {
+      options += '<option value="' + OS_ORDER[i] + '"' + (state.osFamily === OS_ORDER[i] ? ' selected' : '') + '>' + OS_LABELS[OS_ORDER[i]] + '</option>';
+    }
+    var note = state.detectedOs
+      ? 'Automatikusan felismertük: ' + esc(state.detectedOs) + '. Ha nem ez a helyes, válaszd ki a megfelelőt.'
+      : 'Nem sikerült automatikusan felismerni. Válaszd ki a rendszerverziót (Beállítások &gt; Általános &gt; Névjegy).';
+    return '<div class="card"><label class="field">Rendszerverzió<select id="osfam">' + options + '</select><small>' + note + '</small></label></div>';
+  }
+
+  function shareNote(s) {
+    return ' Ez névtelen használati adatot küld az Apple-nek, később visszakapcsolhatod. A ' + (s.paste ? 'napló' : 'fájl') +
+      ' legfeljebb egy nap múlva jelenik meg. Akkor térj vissza erre az oldalra, a link a kiküldéstől számított 72 óráig érvényes.';
+  }
+
+  function pasteSteps(s) {
+    return '<h2>Az akkumulátor adatai a rendszernaplóból</h2>' +
+      '<p>Az eszköz a ciklusszámot egy diagnosztikai naplóban tárolja. Ezt a naplót másolod ide, az oldal csak ezen az eszközön olvassa ki belőle a ciklusszámot és a kapacitást.</p>' +
+      '<ol class="steps">' +
+        '<li>Nyisd meg: ' + s.path + '.</li>' +
+        '<li>' + s.toggle + shareNote(s) + '</li>' +
+        '<li>' + s.list + '</li>' +
+        '<li>Érintsd meg hosszan a szöveget, válaszd a <b>Mindet kijelöl</b> (Select All), majd a <b>Másolás</b> (Copy) lehetőséget.</li>' +
+        '<li>Térj vissza ide, érintsd meg hosszan az alábbi mezőt, válaszd a <b>Beillesztés</b> (Paste) lehetőséget, majd koppints a Beolvasás gombra:' +
+          '<label class="field"><textarea id="paste" placeholder="Ide illeszd be a napló szövegét" spellcheck="false"></textarea></label>' +
+          '<button type="button" class="btn small" id="parse-log">Beolvasás</button></li>' +
+      '</ol>' +
+      '<div class="note">A beillesztett szöveget a beolvasás után töröljük a mezőből. Belőle kizárólag a ciklusszámot, a kapacitást, a rendszerverziót és a napló dátumát vesszük ki. Ha más adat is van benne (például alkalmazások nevei), azt nem olvassuk ki és nem küldjük el.</div>' +
+      '<div id="fileResult"></div>';
+  }
+
+  function fileSteps(s) {
+    return '<h2>Az akkumulátor adatai a rendszerfájlból</h2>' +
+      '<p>Az eszköz a ciklusszámot egy analitikai fájlban tárolja. Ezt a fájlt választod ki az oldalon. Az oldal csak ezen az eszközön olvassa, nem tölti fel.</p>' +
+      '<ol class="steps">' +
+        '<li>Nyisd meg: ' + s.path + '.</li>' +
+        '<li>' + s.toggle + shareNote(s) + '</li>' +
+        '<li>' + s.list + '</li>' +
+        '<li>Nyisd meg, koppints a <b>Megosztás</b> gombra, majd a <b>Mentés a Fájlokba</b> pontra.</li>' +
+        '<li>Térj vissza ide, és válaszd ki a mentett fájlt:<br><input type="file" id="file"></li>' +
+      '</ol>' +
+      '<div class="note">A fájlból kizárólag a ciklusszámot, a kapacitást, a rendszerverziót és a fájl dátumát vesszük ki. Ha más adat is van benne (például alkalmazások nevei), azt nem olvassuk ki és nem küldjük el.</div>' +
+      '<div id="fileResult"></div>';
+  }
+
   function dataIos() {
-    var r = state.route;
+    var s = current();
+    var r = s.batteryScreen ? state.route : (state.route = 'file');
     var html = top() + progress(2) +
       '<h1>Az akkumulátor állapota</h1>' +
       '<p class="lead">Két számot keresünk: a <b>ciklusszámot</b> (hányszor töltötték fel teljesen) és a <b>maximális kapacitást</b> (az eredeti kapacitás hány százalékát tudja még tárolni).</p>' +
-      '<h2>Látod az akku állapotát a Beállításokban?</h2>' +
-      '<p>Nyisd meg: <b>Beállítások &gt; Akkumulátor &gt; Akkumulátor állapota</b>. Nem minden iPad és iPhone mutatja ezt.</p>' +
-      choice('r-screen', 'Igen, látom a számokat', 'Beírod a két értéket.', r === 'screen') +
-      choice('r-file', 'Nem, ilyen képernyőt nem látok', 'Az eszköz egy rendszerfájlból is megadja őket. Végigvezetünk rajta.', r === 'file');
-    if (r === 'file') {
-      html +=
-        '<h2>Az akkumulátor adatai a rendszerfájlból</h2>' +
-        '<p>Az eszköz a ciklusszámot egy analitikai fájlban tárolja. Ezt a fájlt választod ki az oldalon. Az oldal csak ezen az eszközön olvassa, nem tölti fel.</p>' +
-        '<ol class="steps">' +
-          '<li>Nyisd meg: <b>Beállítások &gt; Adatvédelem és biztonság &gt; Analitika és fejlesztések</b>.</li>' +
-          '<li>Ha az <b>iPad analitika megosztása</b> ki van kapcsolva, kapcsold be. Ez névtelen használati adatot küld az Apple-nek, később visszakapcsolhatod. A fájl legfeljebb egy nap múlva jelenik meg. Akkor térj vissza erre az oldalra, a link a kiküldéstől számított 72 óráig érvényes.</li>' +
-          '<li>Koppints az <b>Analitikai adatok</b> pontra, és keresd meg a legfrissebb <b>Analytics-...</b> kezdetű fájlt. Régebbi rendszeren ez <b>log-aggregated-...</b> nevű.</li>' +
-          '<li>Nyisd meg, koppints a <b>Megosztás</b> gombra, majd a <b>Mentés a Fájlokba</b> pontra.</li>' +
-          '<li>Térj vissza ide, és válaszd ki a mentett fájlt:<br><input type="file" id="file"></li>' +
-        '</ol>' +
-        '<div class="note">A fájlból kizárólag a ciklusszámot, a kapacitást, a rendszerverziót és a fájl dátumát vesszük ki. Ha más adat is van benne (például alkalmazások nevei), azt nem olvassuk ki és nem küldjük el.</div>' +
-        '<div id="fileResult"></div>';
+      osSelect();
+    if (s.batteryScreen) {
+      html += '<h2>Látod az akku állapotát a Beállításokban?</h2>' +
+        '<p>Nyisd meg: <b>Beállítások &gt; Akkumulátor &gt; Akkumulátor állapota</b>. Nem minden iPad és iPhone mutatja ezt.</p>' +
+        choice('r-screen', 'Igen, látom a számokat', 'Beírod a két értéket.', r === 'screen') +
+        choice('r-file', 'Nem, ilyen képernyőt nem látok', 'Az eszköz egy rendszernaplóból is megadja őket. Végigvezetünk rajta.', r === 'file');
+    } else {
+      html += '<div class="note">Ezen a rendszerverzión a Beállítások nem mutatja az akkumulátor állapotát. Az eszköz egy rendszernaplóból adja meg a ciklusszámot, ehhez végigvezetünk.</div>';
     }
+    if (r === 'file') html += s.paste ? pasteSteps(s) : fileSteps(s);
     if (r) html += batteryFields();
     html += nav('back', r ? 'next' : '', 'Tovább');
     if (r) html += '<p><button type="button" class="link" id="skip">Ezt most kihagyom</button></p>';
@@ -241,8 +359,37 @@
     on('next', batteryNext);
     on('skip', function () { state.vals.cycles = ''; state.vals.capacity = ''; details(); });
     bindInput('capacity', 'capacity'); bindInput('cycles', 'cycles');
+    var select = $('osfam');
+    if (select) select.addEventListener('change', function () { state.osFamily = this.value; dataIos(); });
     var file = $('file');
     if (file) file.addEventListener('change', onFile);
+    on('parse-log', function () {
+      var area = $('paste');
+      applyIpadText(area ? area.value : '');
+      if (area) area.value = '';
+    });
+  }
+
+  function applyIpadText(text) {
+    var r = P.parseIpadFile(String(text));
+    var what = current().paste ? 'szöveg' : 'fájl';
+    state.parsed = {};
+    if (r.cycles !== null) { state.parsed.cycles = String(r.cycles); state.vals.cycles = String(r.cycles); }
+    if (r.capacity !== null) { state.parsed.capacity = String(r.capacity); state.vals.capacity = String(r.capacity); }
+    if (r.os) { state.parsed.os = r.os; state.vals.os = r.os; }
+    state.extra.fileDate = r.fileDate;
+    save();
+    if ($('cycles')) $('cycles').value = state.vals.cycles;
+    if ($('capacity')) $('capacity').value = state.vals.capacity;
+    if (r.cycles === null && r.capacity === null) {
+      message('fileResult', '<div class="error">Ebben a ' + what + 'ben nem találtunk akkumulátor adatot. Próbáld a következő legfrissebb bejegyzést, vagy írd be az értékeket lent kézzel, ha látod őket valahol.</div>');
+      return;
+    }
+    message('fileResult', '<div class="result"><dl>' +
+      '<dt>Ciklusszám</dt><dd>' + esc(r.cycles === null ? 'nem található' : r.cycles) + '</dd>' +
+      '<dt>Maximális kapacitás</dt><dd>' + esc(r.capacity === null ? 'nem található' : r.capacity + '%') + '</dd>' +
+      (r.fileDate ? '<dt>A ' + what + ' kelte</dt><dd>' + esc(r.fileDate) + '</dd>' : '') +
+      '</dl></div><div class="success">Kész. A ' + what + ' nem hagyta el az eszközt. Az értékeket lent javíthatod.</div>');
   }
 
   function onFile(event) {
@@ -251,25 +398,7 @@
     if (file.size > MAX_FILE) { message('fileResult', '<div class="error">A fájl túl nagy. Válassz másikat.</div>'); return; }
     message('fileResult', '<p class="muted">Olvasás...</p>');
     var reader = new FileReader();
-    reader.onload = function () {
-      var r = P.parseIpadFile(String(reader.result));
-      state.parsed = {};
-      if (r.cycles !== null) { state.parsed.cycles = String(r.cycles); state.vals.cycles = String(r.cycles); }
-      if (r.capacity !== null) { state.parsed.capacity = String(r.capacity); state.vals.capacity = String(r.capacity); }
-      if (r.os) { state.parsed.os = r.os; state.vals.os = r.os; }
-      state.extra.fileDate = r.fileDate;
-      if ($('cycles')) $('cycles').value = state.vals.cycles;
-      if ($('capacity')) $('capacity').value = state.vals.capacity;
-      if (r.cycles === null && r.capacity === null) {
-        message('fileResult', '<div class="error">Ebben a fájlban nem találtunk akkumulátor adatot. Próbáld a következő legfrissebb fájlt, vagy ha látod a számokat a Beállításokban, válaszd fent az első lehetőséget.</div>');
-        return;
-      }
-      message('fileResult', '<div class="result"><dl>' +
-        '<dt>Ciklusszám</dt><dd>' + esc(r.cycles === null ? 'nem található' : r.cycles) + '</dd>' +
-        '<dt>Maximális kapacitás</dt><dd>' + esc(r.capacity === null ? 'nem található' : r.capacity + '%') + '</dd>' +
-        (r.fileDate ? '<dt>A fájl kelte</dt><dd>' + esc(r.fileDate) + '</dd>' : '') +
-        '</dl></div><div class="success">Kész. A fájl nem hagyta el az eszközt. Az értékeket lent javíthatod.</div>');
-    };
+    reader.onload = function () { applyIpadText(reader.result); };
     reader.onerror = function () { message('fileResult', '<div class="error">A fájl nem olvasható. Válassz másikat.</div>'); };
     reader.readAsText(file);
   }
@@ -361,21 +490,22 @@
   }
 
   function details() {
-    var v = state.vals, mac = state.kind === 'mac';
+    state.step = 'details';
+    var v = state.vals, mac = state.kind === 'mac', cur = current();
     show(top() + progress(3) +
       '<h1>Az eszköz adatai</h1>' +
       '<p class="lead">Ezeket egyszer kérjük, hogy a vásárló össze tudja vetni a hirdetéssel. Ami előre ki van töltve, azt az előző lépésben olvastuk ki. Javíthatod.</p>' +
       textField('f-model', 'Modell', v.model, mac ? 'Például: MacBook Air' : 'Például: iPad Air (4. generáció)',
-        (mac ? 'Apple menü &gt; Erről a Macről.' : 'Beállítások &gt; Általános &gt; Névjegy &gt; Típusnév.') + ' Ne írj ide személyes adatot.', 60) +
+        (mac ? 'Apple menü &gt; Erről a Macről.' : cur.model) + ' Ne írj ide személyes adatot.', 60) +
       textField('f-storage', 'Tárhely', v.storage, 'Például: 64 GB', mac ? 'Apple menü &gt; Erről a Macről.' : 'A Névjegy oldalon, a Kapacitás sorban.', 20) +
-      textField('f-os', 'Rendszerverzió', v.os, mac ? 'Például: 14.5' : 'Például: 17.4', mac ? 'Apple menü &gt; Erről a Macről.' : 'Beállítások &gt; Általános &gt; Névjegy &gt; Szoftververzió.', 60) +
+      textField('f-os', 'Rendszerverzió', v.os, mac ? 'Például: 14.5' : 'Például: 17.4', mac ? 'Apple menü &gt; Erről a Macről.' : cur.version, 60) +
       textField('f-serial', 'Sorozatszám', v.serial, 'Például: C02XXXXXXXXX',
         mac ? 'Apple menü &gt; Erről a Macről.' : 'Beállítások &gt; Általános &gt; Névjegy &gt; Sorozatszám. Hosszan nyomva másolhatod.', 20,
         ' autocapitalize="characters"') +
       '<div class="note">A sorozatszámból alapértelmezés szerint <b>csak egy lenyomatot</b> küldünk, egy kódot, amiből a sorozatszám nem fejthető vissza, és az utolsó 4 karakterét. A vásárló átvételkor kiszámolja ugyanezt a készülékről, így ellenőrzi, hogy ugyanaz az eszköz érkezett-e meg.</div>' +
       '<label class="check"><input type="checkbox" id="share"' + (state.shareSerial ? ' checked' : '') + '> A teljes sorozatszámot is megosztom, hogy a vásárló le tudja ellenőrizni az Apple jótállási adatait. (Nem kötelező.)</label>' +
       '<h2>Ki vagy jelentkezve az Apple-fiókodból?</h2>' +
-      '<p class="muted">Ha az eszköz még a te Apple-fiókodhoz van kötve (Aktiválási zár), az új tulajdonos nem tudja használni. Kijelentkezés: Beállítások, legfelül a neved, lent Kijelentkezés.</p>' +
+      '<p class="muted">Ha az eszköz még a te Apple-fiókodhoz van kötve (Aktiválási zár), az új tulajdonos nem tudja használni. Kijelentkezés: ' + (mac ? 'Apple menü &gt; Rendszerbeállítások, legfelül a neved, majd Kijelentkezés.' : cur.signout) + '</p>' +
       '<label class="radio"><input type="radio" name="apple" value="yes"' + (state.apple === 'yes' ? ' checked' : '') + '> Kijelentkeztem, és a Keresés funkció ki van kapcsolva</label>' +
       '<label class="radio"><input type="radio" name="apple" value="no"' + (state.apple === 'no' ? ' checked' : '') + '> Még nem jelentkeztem ki</label>' +
       '<label class="radio"><input type="radio" name="apple" value="unsure"' + (state.apple === 'unsure' ? ' checked' : '') + '> Nem vagyok biztos benne</label>' +
@@ -395,6 +525,7 @@
   }
 
   function review() {
+    state.step = 'review';
     var d = collect();
     var sections = P.buildSections(d);
     var html = top() + progress(4) +
@@ -423,9 +554,21 @@
   }
 
   function post(payload) {
-    return fetch(window.BACKEND_URL, {
-      method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload)
-    }).then(function (response) { return response.json(); });
+    var body = JSON.stringify(payload);
+    if (window.fetch) {
+      return fetch(window.BACKEND_URL, {
+        method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: body
+      }).then(function (response) { return response.json(); });
+    }
+    // A régi Safarinak (iOS 9, 10) nincs fetch-e.
+    return new Promise(function (resolve, reject) {
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', window.BACKEND_URL);
+      xhr.setRequestHeader('Content-Type', 'text/plain;charset=utf-8');
+      xhr.onload = function () { try { resolve(JSON.parse(xhr.responseText)); } catch (e) { reject(e); } };
+      xhr.onerror = function () { reject(new TypeError('network')); };
+      xhr.send(body);
+    });
   }
   function serverError(text) { var e = new Error(text); e.fromServer = true; return e; }
 
@@ -460,13 +603,21 @@
       '<div class="success">Az adatok elmentek a vásárlónak. Az oldalt bezárhatod.</div>' +
       '<p>Ezen az eszközön nem tároltunk semmit.</p>';
     if (state.route === 'file') {
-      html += '<p>Ha az analitika megosztását csak ehhez kapcsoltad be, a Beállításokban (Adatvédelem és biztonság &gt; Analitika és fejlesztések) visszakapcsolhatod.</p>';
+      html += '<p>Ha az elemzés megosztását csak ehhez kapcsoltad be, a Beállításokban visszakapcsolhatod: ' + current().path + '.</p>';
     }
     if (DEMO) {
       html += '<details><summary>Ezt küldtük volna (próbaüzem)</summary><pre class="code">' + esc(JSON.stringify(sections, null, 2)) + '</pre></details>';
     }
     show(html);
+    forget();
   }
 
-  welcome();
+  var STEPS = { welcome: welcome, kind: kind, data: data, details: details, review: review };
+
+  var detected = P.detectOs(navigator.userAgent, navigator.maxTouchPoints || 0);
+  var restored = restore();
+  if (detected) state.detectedOs = detected.version;
+  if (!state.osFamily) state.osFamily = detected ? familyOf(detected.major) : 'latest';
+  if (detected && !state.vals.os) state.vals.os = detected.version;
+  if (restored) STEPS[state.step](); else welcome();
 })();
