@@ -1,5 +1,7 @@
 // Az eladói varázsló. Független az átvételi oldal USB-s folyamatától (receiver/app.js).
 // Minden adat a böngészőben marad, amíg az eladó a végén meg nem nyomja a Küldés gombot.
+// Felépítés: minden képernyő egy lépés (SCREENS). A megtett út (state.path, state.idx) a sessionStorage-ban és a
+// böngésző előzményeiben is megvan, ezért a Vissza gomb és a böngésző Vissza gombja is ugyanazt csinálja.
 (function () {
   'use strict';
 
@@ -10,8 +12,30 @@
   var CODE_PATTERN = /^(?:[0-9]{9}|[0-9A-Z]{12})$/;
   var CODE = CODE_PATTERN.test(hash) ? hash : '';
   var MAX_FILE = 50 * 1024 * 1024;
-  // Az USB-s út addig rejtett, amíg nincs letölthető kiolvasó program (config.js: USB_TOOL_URL). A ?usb a címben kipróbáláshoz bekapcsolja.
-  var USB_ENABLED = !!window.USB_TOOL_URL || /[?&]usb(=|&|$)/.test(location.search);
+
+  // Melyik gépen nyitották meg az oldalt: az eladandó iOS eszközön, vagy egy számítógépen?
+  var DEVICE = P.detectOs(navigator.userAgent, navigator.maxTouchPoints || 0);
+  var ON_COMPUTER = !DEVICE;
+  function computerOs() {
+    var ua = navigator.userAgent;
+    if (/Windows/.test(ua)) return 'windows';
+    if (/Macintosh|Mac OS X/.test(ua)) return 'mac';
+    if (/Linux|X11/.test(ua)) return 'linux';
+    return '';
+  }
+  // A letölthető kiolvasó programok fájlnevei. A USB_TOOL_URL (config.js) a letöltési mappa címe, / jellel a végén.
+  var TOOL_FILES = {
+    windows: [['ipad-audit-reader-windows-x86_64.exe', 'Windows, egyetlen fájl'],
+      ['ipad-audit-reader-windows-x86_64-folder.zip', 'Windows, mappa (ha a vírusirtó jelez)']],
+    mac: [['ipad-audit-reader-macos-arm64.tar.gz', 'Mac Apple chippel (M1 és újabb)'],
+      ['ipad-audit-reader-macos-x86_64.tar.gz', 'Mac Intel processzorral']],
+    linux: [['ipad-audit-reader-linux-x86_64.tar.gz', 'Linux']]
+  };
+  // A letöltési mappa: a GitHub release legfrissebb kiadása. A config.js-ben a USB_TOOL_URL felülírhatja.
+  var TOOL_BASE = window.USB_TOOL_URL || 'https://github.com/krisz0722/ipad-audit/releases/latest/download/';
+  function pageAddress() {
+    return location.origin + location.pathname + (DEMO ? '#DEMO' : (CODE ? '#' + CODE : ''));
+  }
 
   // Csak olvas, nem ír, nem csatlakozik a hálózatra. A profiles kimenetéből csak a két igen/nem sor jön át,
   // mert a teljes kimenet a felügyeleti szerver címét is tartalmazhatja.
@@ -23,13 +47,16 @@
     "df -k /System/Volumes/Data | tail -1";
 
   var state = {
-    step: '', osFamily: '', detectedOs: '',
+    step: 'welcome', path: ['welcome'], idx: 0,
+    osFamily: '', detectedOs: '',
     kind: '', route: '',
     vals: { model: '', storage: '', os: '', memory: '', chip: '', serial: '', cycles: '', capacity: '' },
     parsed: {},
     extra: { condition: '', fileDate: '', activationLock: '', dep: null, mdm: null, modelId: '' },
-    shareSerial: true, apple: '', sid: '', sending: false, noLog: false
+    shareSerial: true, apple: '', sid: '', sending: false, sent: false, noLog: false, demoSections: null
   };
+
+  var SCREENS = {};
 
   /* ---------- segédek ---------- */
 
@@ -55,6 +82,7 @@
     var title = app.querySelector('h1');
     if (title) { title.setAttribute('tabindex', '-1'); try { title.focus({ preventScroll: true }); } catch (e) { /* régi böngésző */ } }
     window.scrollTo(0, 0);
+    on('back', goBack);
     save();
   }
   function top() {
@@ -68,8 +96,9 @@
   function choice(id, title, sub, selected) {
     return '<button type="button" class="choice' + (selected ? ' on' : '') + '" id="' + id + '"><b>' + title + '</b><span>' + sub + '</span></button>';
   }
-  function nav(backId, nextId, nextLabel) {
-    return '<div class="nav"><button type="button" class="btn secondary" id="' + backId + '">Vissza</button>' +
+  // Lábléc: Vissza (ha van hova) és opcionálisan a Tovább gomb.
+  function foot(nextId, nextLabel) {
+    return '<div class="nav">' + (state.idx > 0 ? '<button type="button" class="btn secondary" id="back">Vissza</button>' : '') +
       (nextId ? '<button type="button" class="btn" id="' + nextId + '">' + nextLabel + '</button>' : '') + '</div>';
   }
   function textField(id, label, value, placeholder, help, max, extra) {
@@ -104,6 +133,48 @@
     if (navigator.clipboard && window.isSecureContext) {
       navigator.clipboard.writeText(text).then(function () { done(true); }, fallback);
     } else { fallback(); }
+  }
+
+  /* ---------- lépéskezelés ---------- */
+
+  function render() {
+    if (state.sent) state.step = 'done';
+    var screen = SCREENS[state.step] || SCREENS.welcome;
+    screen();
+  }
+  function go(name) {
+    state.path = state.path.slice(0, state.idx + 1);
+    state.path.push(name);
+    state.idx = state.path.length - 1;
+    state.step = name;
+    try { history.pushState({ idx: state.idx }, ''); } catch (e) { /* nem baj, a gomb enélkül is visszalép */ }
+    render();
+  }
+  function replace(name) {
+    state.path[state.idx] = name;
+    state.step = name;
+    try { history.replaceState({ idx: state.idx }, ''); } catch (e) { /* nem baj */ }
+    render();
+  }
+  function goBack() {
+    if (state.idx <= 0) return;
+    var before = state.idx;
+    try { history.back(); } catch (e) { /* lent a tartalék */ }
+    // Ha a böngésző nem jelezte a visszalépést, mi lépünk vissza.
+    setTimeout(function () {
+      if (state.idx === before) {
+        state.idx = before - 1;
+        state.step = state.path[state.idx];
+        render();
+      }
+    }, 250);
+  }
+  function onPop(event) {
+    var idx = event.state && typeof event.state.idx === 'number' ? event.state.idx : null;
+    if (idx === null || idx < 0 || idx >= state.path.length) return;
+    state.idx = idx;
+    state.step = state.path[idx];
+    render();
   }
 
   /* ---------- rendszerverzió szerinti lépések ---------- */
@@ -154,11 +225,33 @@
     return 'latest';
   }
   function current() { return OS_STEPS[state.osFamily] || OS_STEPS.latest; }
+  // Az akku-ág első képernyője az USB-s kérdés után: Beállítások (ha az adott rendszer mutatja), különben a napló.
+  function afterUsb() { return current().batteryScreen ? 'screen_ask' : 'log_ask'; }
+
+  function osSelect() {
+    var options = '';
+    for (var i = 0; i < OS_ORDER.length; i++) {
+      options += '<option value="' + OS_ORDER[i] + '"' + (state.osFamily === OS_ORDER[i] ? ' selected' : '') + '>' + OS_LABELS[OS_ORDER[i]] + '</option>';
+    }
+    var note = state.detectedOs
+      ? 'Automatikusan felismertük: ' + esc(state.detectedOs) + '. Ha nem ez a helyes, válaszd ki a megfelelőt.'
+      : 'Nem sikerült automatikusan felismerni. Válaszd ki a rendszerverziót (Beállítások &gt; Általános &gt; Névjegy).';
+    return '<div class="card"><label class="field">Rendszerverzió<select id="osfam">' + options + '</select><small>' + note + '</small></label></div>';
+  }
+  function bindOsSelect() {
+    var select = $('osfam');
+    if (!select) return;
+    select.addEventListener('change', function () {
+      state.osFamily = this.value;
+      if (state.step === 'screen_ask' && !current().batteryScreen) replace('log_ask'); else render();
+    });
+  }
 
   /* ---------- állapotmentés: egy régi iPad a Beállításokból visszatérve gyakran újratölti a lapot ---------- */
 
-  var STORE_KEY = 'ipad-audit-seller-v1';
+  var STORE_KEY = 'ipad-audit-seller-v2';
   function save() {
+    if (state.sent) return;
     try { sessionStorage.setItem(STORE_KEY, JSON.stringify({ demo: DEMO, code: CODE, state: state })); } catch (e) { /* privát mód: enélkül is működik */ }
   }
   function forget() {
@@ -167,11 +260,12 @@
   function restore() {
     try {
       var saved = JSON.parse(sessionStorage.getItem(STORE_KEY) || 'null');
-      if (!saved || !saved.state || !STEPS[saved.state.step] || saved.state.step === 'welcome') return false;
+      if (!saved || !saved.state || !SCREENS[saved.state.step] || saved.state.step === 'welcome') return false;
+      if (!Array.isArray(saved.state.path) || typeof saved.state.idx !== 'number') return false;
       if (CODE && saved.code && CODE !== saved.code) return false;
       DEMO = !!saved.demo; CODE = saved.code || '';
       for (var key in saved.state) { if (Object.prototype.hasOwnProperty.call(saved.state, key)) state[key] = saved.state[key]; }
-      state.sending = false;
+      state.sending = false; state.sent = false;
       return true;
     } catch (e) { return false; }
   }
@@ -207,22 +301,127 @@
     };
   }
 
+  /* ---------- eredmények: ugyanaz a Tovább és javítás gomb minden beolvasás után ---------- */
+
+  function resultActions() {
+    return '<button type="button" class="btn" id="res-next">Tovább</button>' +
+      '<p><button type="button" class="link" id="res-edit">Az értékek javítása</button></p>';
+  }
+  function bindResult(editStep) {
+    on('res-next', function () { go('details'); });
+    on('res-edit', function () { go(editStep); });
+  }
+
+  function applyUsbText(text) {
+    var r = P.parseUsbOutput(String(text));
+    if (!r.valid) {
+      message('result', '<div class="error">Ebben a szövegben nem találtuk a program kimenetét. Ellenőrizd, hogy az <b>IPAD-AUDIT-USB</b> sortól az <b>END</b> sorig mindent bemásoltál-e, vagy futtasd újra a programot.</div>');
+      return;
+    }
+    state.parsed = {};
+    state.noLog = false;
+    state.route = 'usb';
+    function put(key, value) {
+      if (value === '' || value === null || value === undefined) return;
+      state.parsed[key] = String(value); state.vals[key] = String(value);
+    }
+    put('cycles', r.cycles); put('capacity', r.capacity); put('os', r.os); put('serial', r.serial);
+    put('storage', r.storage); put('model', r.modelName || r.model);
+    state.extra.activationLock = r.activationLock;
+    state.extra.modelId = r.modelName ? r.model : '';
+    save();
+    var lock = r.activationLock === 'Enabled' ? 'bekapcsolva' : (r.activationLock === 'Disabled' ? 'kikapcsolva' : 'nem olvasható ki');
+    message('result', '<div class="result"><dl>' +
+      '<dt>Modell</dt><dd>' + esc(r.modelName ? r.modelName + ' (' + r.model + ')' : (r.model || 'nem található')) + '</dd>' +
+      '<dt>Rendszer</dt><dd>' + esc(r.os || 'nem található') + '</dd>' +
+      '<dt>Ciklusszám</dt><dd>' + esc(r.cycles === null ? 'nem található' : r.cycles) + '</dd>' +
+      '<dt>Maximális kapacitás</dt><dd>' + esc(r.capacity === null ? 'nem található' : r.capacity + '%') + '</dd>' +
+      '<dt>Aktiválási zár</dt><dd>' + esc(lock) + '</dd>' +
+      '</dl></div><div class="success">Kész. A szöveget töröltük a mezőből.</div>' + resultActions());
+    bindResult('screen_enter');
+  }
+
+  function applyIpadText(text) {
+    var r = P.parseIpadFile(String(text));
+    var what = current().paste ? 'szöveg' : 'fájl';
+    state.parsed = {};
+    state.noLog = false;
+    state.route = 'file';
+    if (r.cycles !== null) { state.parsed.cycles = String(r.cycles); state.vals.cycles = String(r.cycles); }
+    if (r.capacity !== null) { state.parsed.capacity = String(r.capacity); state.vals.capacity = String(r.capacity); }
+    if (r.os) { state.parsed.os = r.os; state.vals.os = r.os; }
+    state.extra.fileDate = r.fileDate;
+    save();
+    if (r.cycles === null && r.capacity === null) {
+      message('result', '<div class="error">Ebben a ' + what + 'ben nem találtunk akkumulátor adatot. Próbáld a következő legfrissebb bejegyzést.</div>' +
+        '<p><button type="button" class="link" id="res-none">Nincs több ilyen bejegyzés</button></p>');
+      on('res-none', function () { go('nolog'); });
+      return;
+    }
+    message('result', '<div class="result"><dl>' +
+      '<dt>Ciklusszám</dt><dd>' + esc(r.cycles === null ? 'nem található' : r.cycles) + '</dd>' +
+      '<dt>Maximális kapacitás</dt><dd>' + esc(r.capacity === null ? 'nem található' : r.capacity + '%') + '</dd>' +
+      (r.fileDate ? '<dt>A ' + what + ' kelte</dt><dd>' + esc(r.fileDate) + '</dd>' : '') +
+      '</dl></div><div class="success">Kész. A ' + what + ' nem hagyta el az eszközt.</div>' + resultActions());
+    bindResult('screen_enter');
+  }
+
+  function onFile(event) {
+    var file = event.target.files && event.target.files[0];
+    if (!file) return;
+    if (file.size > MAX_FILE) { message('result', '<div class="error">A fájl túl nagy. Válassz másikat.</div>'); return; }
+    message('result', '<p class="muted">Olvasás...</p>');
+    var reader = new FileReader();
+    reader.onload = function () { applyIpadText(reader.result); };
+    reader.onerror = function () { message('result', '<div class="error">A fájl nem olvasható. Válassz másikat.</div>'); };
+    reader.readAsText(file);
+  }
+
+  function parseMac() {
+    var r = P.parseMacOutput($('paste') ? $('paste').value : '');
+    if (!r.valid) {
+      message('result', '<div class="error">Ebben a szövegben nem találtuk a parancs kimenetét. Ellenőrizd, hogy a teljes Terminál-szöveget másoltad ki, vagy futtasd újra a parancsot.</div>');
+      return;
+    }
+    state.parsed = {};
+    state.noLog = false;
+    state.route = 'command';
+    function put(key, val) {
+      if (val === '' || val === null || val === undefined) return;
+      state.parsed[key] = String(val); state.vals[key] = String(val);
+    }
+    put('model', r.model); put('chip', r.chip); put('memory', r.memory); put('storage', r.storage); put('os', r.os);
+    put('serial', r.serial); put('cycles', r.cycles); put('capacity', r.capacity);
+    state.extra = { condition: r.condition, fileDate: '', activationLock: r.activationLock, dep: r.dep, mdm: r.mdm, modelId: r.modelId };
+    $('paste').value = '';
+    function line(label, val) { return '<dt>' + label + '</dt><dd>' + esc(val === '' || val === null ? 'nem található' : val) + '</dd>'; }
+    var lock = r.activationLock === 'Enabled' ? 'bekapcsolva' : (r.activationLock === 'Disabled' ? 'kikapcsolva' : '');
+    var mdm = r.dep === null && r.mdm === null ? '' : ((r.dep || r.mdm) ? 'van' : 'nincs');
+    save();
+    message('result', '<div class="result"><dl>' +
+      line('Modell', r.model ? r.model + (r.modelId ? ' (' + r.modelId + ')' : '') : '') + line('Chip', r.chip) + line('Memória', r.memory) +
+      line('Tárhely', r.storage) + line('macOS', r.os) + line('Ciklusszám', r.cycles) +
+      line('Maximális kapacitás', r.capacity === null ? '' : r.capacity + '%') + line('Akku állapota', r.condition) +
+      line('Aktiválási zár', lock) + line('Céges felügyelet', mdm) + line('Sorozatszám', r.serial) +
+      '</dl></div><div class="success">Kész. A beillesztett szöveget töröltük a mezőből, csak a fenti értékeket használjuk.</div>' + resultActions());
+    bindResult('mac_manual');
+  }
+
   /* ---------- képernyők ---------- */
 
   function begin() {
     var typed = $('code') ? $('code').value : '';
     var text = String(typed).toUpperCase().replace(/[^0-9A-Z]/g, '');
-    if (text === 'DEMO') { DEMO = true; CODE = ''; kind(); return; }
+    if (text === 'DEMO') { DEMO = true; CODE = ''; go('kind'); return; }
     if (!CODE_PATTERN.test(text)) {
       message('msg', '<div class="error">A meghívókód 9 számjegyből áll. Ellenőrizd, hogy pontosan úgy írtad-e be, ahogy kaptad.</div>');
       return;
     }
     DEMO = false; CODE = text;
-    kind();
+    go('kind');
   }
 
-  function welcome() {
-    state.step = 'welcome';
+  SCREENS.welcome = function () {
     show(top() +
       '<h1>Az eszközöd állapotának ellenőrzése</h1>' +
       '<p class="lead">A vásárló szeretné látni az akkumulátor és az alapadatok állapotát, mielőtt megveszi az eszközt. Ez az oldal lépésről lépésre végigvezet rajta. Kb. 5 percet vesz igénybe, és nem kell semmit telepítened.</p>' +
@@ -251,7 +450,7 @@
         '<li><b>Nyílt forráskód.</b> Az oldal teljes kódja nyilvános, bárki ellenőrizheti, mit csinál: <a href="https://gitlab.com/krisz0722/ipad-audit/-/tree/main/web" target="_blank" rel="noopener">forráskód megtekintése</a>.</li>' +
         '<li><b>Bármikor kiléphetsz.</b> Ha meggondolod magad, zárd be az oldalt. Addig nem történik semmi.</li>' +
       '</ul>' +
-      '<div class="note"><b>Fontos:</b> ezt az oldalt azon az eszközön nyisd meg, amelyet eladsz.</div>' +
+      '<div class="note"><b>Fontos:</b> az oldalt megnyithatod az eladandó eszközön (a Beállításokból adod meg az adatokat), vagy egy számítógépen (iPad és iPhone esetén USB-kábellel olvassuk ki). Macnél azon a Macen nyisd meg, amelyet eladsz.</div>' +
       '<h2>Meghívókód</h2>' +
       '<p>Írd be a vásárlótól kapott 9 számjegyű kódot. A szóköz és a kötőjel nem számít.</p>' +
       '<label class="field">Meghívókód<input type="text" id="code" value="' + esc(DEMO ? 'DEMO' : CODE) + '" placeholder="Például: 123 456 789" maxlength="24" inputmode="numeric" autocomplete="off" spellcheck="false"></label>' +
@@ -263,22 +462,146 @@
       var digits = this.value.replace(/\D/g, '');
       if (digits.length === this.value.replace(/[\s-]/g, '').length) this.value = digits.replace(/(\d{3})(?=\d)/g, '$1 ');
     });
+  };
+
+  function pickKind(kind) {
+    if (state.kind !== kind) { state.route = ''; state.parsed = {}; }
+    state.kind = kind;
+    if (kind === 'mac') { go('mac_run'); return; }
+    if (ON_COMPUTER) { go('usb_get'); return; }
+    go('usb_ask');
   }
 
-  function kind() {
-    state.step = 'kind';
+  SCREENS.kind = function () {
     show(top() + progress(1) +
       '<h1>Milyen eszközt adsz el?</h1>' +
       '<p>Ettől függ, hogyan olvassuk ki az akkumulátor adatait.</p>' +
       choice('k-ios', 'iPad vagy iPhone', 'Az adatokat a Beállításokból olvassuk ki. Nem kell semmit telepítened.', state.kind === 'ios') +
       choice('k-mac', 'Mac', 'MacBook, iMac vagy Mac mini. Egy rövid, csak olvasó parancsot futtatsz a Terminálban.', state.kind === 'mac') +
-      '<div class="nav"><button type="button" class="btn secondary" id="back">Vissza</button></div>');
-    on('k-ios', function () { if (state.kind !== 'ios') { state.route = ''; state.parsed = {}; } state.kind = 'ios'; data(); });
-    on('k-mac', function () { if (state.kind !== 'mac') { state.route = ''; state.parsed = {}; } state.kind = 'mac'; data(); });
-    on('back', welcome);
+      foot());
+    on('k-ios', function () { pickKind('ios'); });
+    on('k-mac', function () { pickKind('mac'); });
+  };
+
+  /* ---- akku, iPad és iPhone: USB ---- */
+
+  SCREENS.usb_ask = function () {
+    show(top() + progress(2) +
+      '<h1>Van számítógéped?</h1>' +
+      '<p class="lead">Ha igen, egy kis programmal USB-kábelen át kiolvashatjuk az akkumulátor adatát. Ez a legpontosabb, és minden eszközön működik. Ehhez ezt az oldalt a számítógépen kell megnyitnod, ahová az eszközt rákötöd.</p>' +
+      choice('u-yes', 'Igen, USB-vel olvasom ki', 'Letöltesz egy kis programot, és a kimenetét bemásolod ide.', false) +
+      choice('u-no', 'Nincs, vagy most nem szeretném', 'Akkor a Beállításokból vagy a rendszernaplóból próbáljuk.', false) +
+      foot());
+    on('u-yes', function () { go(ON_COMPUTER ? 'usb_get' : 'usb_switch'); });
+    on('u-no', function () { go(afterUsb()); });
+  };
+
+  function macDownloadCommand() {
+    var base = TOOL_BASE;
+    return 'cd ~/Downloads && curl -fsSL -o ipad-audit-reader.tar.gz "' + base + 'ipad-audit-reader-macos-$(uname -m).tar.gz" && tar -xzf ipad-audit-reader.tar.gz && ./ipad-audit-reader';
   }
 
-  function data() { state.step = 'data'; if (state.kind === 'mac') dataMac(); else dataIos(); }
+  SCREENS.usb_get = function () {
+    var os = computerOs();
+    var groups = os && TOOL_FILES[os] ? [os] : ['windows', 'mac', 'linux'];
+    var base = TOOL_BASE;
+    var buttons = '';
+    for (var g = 0; g < groups.length; g++) {
+      var files = TOOL_FILES[groups[g]];
+      for (var i = 0; i < files.length; i++) {
+        buttons += '<p><a class="btn" href="' + esc(base + files[i][0]) + '" download>' + esc(files[i][1]) + '</a></p>';
+      }
+    }
+    var notes = '';
+    if (os === 'windows' || !os) {
+      notes += '<div class="note"><b>Windows:</b> az Apple USB-illesztőprogramja is kell hozzá (iTunes vagy Apple Devices alkalmazás). Ha a Windows figyelmeztet ("A Windows megvédte a számítógépet"), kattints a <b>További információ</b>, majd a <b>Futtatás mindenképpen</b> gombra. A program nyílt forráskódú, a letöltés mellett ott az ellenőrző összege.</div>';
+    }
+    if (os === 'mac' || !os) {
+      notes += '<div class="note"><b>Mac:</b> a böngészővel letöltött programot a macOS blokkolhatja. Ilyenkor a Terminálból töltsd le, ott nincs blokk.' +
+        '<pre class="code" id="mac-cmd">' + esc(macDownloadCommand()) + '</pre>' +
+        '<button type="button" class="btn small" id="copy-mac">Parancs másolása</button><span class="muted" id="copied-mac"></span></div>';
+    }
+    show(top() + progress(2) +
+      '<h1>A kiolvasó program letöltése</h1>' +
+      '<p class="lead">Töltsd le a számítógépedre a megfelelő fájlt:</p>' + buttons + notes +
+      '<div class="card"><h3>Mit csinál a program?</h3><ul class="marks yes">' +
+        '<li>Csak olvas, semmit nem módosít az eszközön.</li>' +
+        '<li>Nem csatlakozik az internetre, és semmit nem küld el.</li>' +
+        '<li>Egy rövid szöveget ír ki, és a vágólapra másolja. Te másolod be ide, és az előnézetben látod, mi megy tovább.</li>' +
+      '</ul></div>' +
+      foot('u-next', 'Letöltöttem, tovább'));
+    on('u-next', function () { go('usb_run'); });
+    on('copy-mac', function () {
+      copyText(macDownloadCommand(), function (ok) {
+        message('copied-mac', ok ? ' Kimásolva.' : ' Nem sikerült. Jelöld ki a parancsot, és másold ki kézzel.');
+      });
+    });
+  };
+
+  SCREENS.usb_run = function () {
+    var os = computerOs();
+    var runStep = os === 'windows'
+      ? 'Kattints duplán a letöltött fájlra (a mappás változatnál előbb csomagold ki, és az <b>ipad-audit-reader.exe</b> fájlt indítsd).'
+      : (os === 'mac'
+        ? 'Ha a Terminál-parancsot használtad, a program már fut. Különben nyisd meg a Terminált, és indítsd a letöltött programot.'
+        : 'Csomagold ki a letöltött fájlt, és indítsd el a programot egy terminálból.');
+    show(top() + progress(2) +
+      '<h1>Csatlakoztatás és futtatás</h1>' +
+      '<ol class="steps">' +
+        '<li>Kösd az eszközt USB-kábellel a számítógéphez, oldd fel, és ha megkérdezi, koppints a <b>Megbízom</b> gombra.</li>' +
+        '<li>' + runStep + '</li>' +
+        '<li>Pár másodperc múlva a program kiírja a szöveget (az <b>IPAD-AUDIT-USB</b> sortól az <b>END</b> sorig), és <b>a vágólapra másolja</b>. Windowson az ablak bezárásához nyomj Entert.</li>' +
+      '</ol>' +
+      '<div class="note">Ha a vágólapra másolás nem sikerült, a program ezt kiírja. Ilyenkor jelöld ki a szöveget, és másold ki.</div>' +
+      foot('u-next', 'Kész, tovább'));
+    on('u-next', function () { go('usb_paste'); });
+  };
+
+  SCREENS.usb_switch = function () {
+    show(top() + progress(2) +
+      '<h1>Nyisd meg az oldalt a számítógépeden</h1>' +
+      '<p class="lead">Az USB-s kiolvasáshoz a számítógépen kell dolgoznod, ahová az eszközt rákötöd. Nyisd meg ott ezt a címet (küldd el magadnak például emailben):</p>' +
+      '<pre class="code" id="addr">' + esc(pageAddress()) + '</pre>' +
+      '<button type="button" class="btn small" id="copy-addr">Cím másolása</button><span class="muted" id="copied-addr"></span>' +
+      '<div class="note">A meghívókód a címben benne van, ott nem kell újra beírnod. A számítógépen az elejétől kezdd, és válaszd az USB-s utat. Itt az eszközön nem kell mást tenned.</div>' +
+      foot());
+    on('copy-addr', function () {
+      copyText(pageAddress(), function (ok) {
+        message('copied-addr', ok ? ' Kimásolva.' : ' Nem sikerült. Jelöld ki a címet, és másold ki kézzel.');
+      });
+    });
+  };
+
+  SCREENS.usb_paste = function () {
+    show(top() + progress(2) +
+      '<h1>A kimenet beillesztése</h1>' +
+      '<p>Illeszd be a program kimenetét, és koppints a Beolvasás gombra:</p>' +
+      '<label class="field"><textarea id="usb-paste" placeholder="Ide illeszd be a program kimenetét" spellcheck="false"></textarea></label>' +
+      '<button type="button" class="btn small" id="parse-usb">Beolvasás</button>' +
+      '<div class="note">A beillesztett szöveget a beolvasás után töröljük a mezőből. Csak a modellt, a rendszerverziót, a tárhelyet, a sorozatszámot, az akkumulátor adatait és az Aktiválási zár állapotát vesszük ki belőle.</div>' +
+      '<div id="result"></div>' + foot());
+    on('parse-usb', function () {
+      var area = $('usb-paste');
+      applyUsbText(area ? area.value : '');
+      if (area) area.value = '';
+    });
+  };
+
+  /* ---- akku, iPad és iPhone: Beállítások ---- */
+
+  SCREENS.screen_ask = function () {
+    if (!current().batteryScreen) { replace('log_ask'); return; }
+    show(top() + progress(2) +
+      '<h1>Látod az akku állapotát a Beállításokban?</h1>' +
+      '<p class="lead">Nyisd meg: <b>Beállítások &gt; Akkumulátor &gt; Akkumulátor állapota</b>. Nem minden iPad és iPhone mutatja ezt.</p>' +
+      osSelect() +
+      choice('s-yes', 'Igen, látom a számokat', 'Beírod a két értéket.', false) +
+      choice('s-no', 'Nem, ilyen képernyőt nem látok', 'Akkor a rendszernaplóból próbáljuk, végigvezetünk rajta.', false) +
+      foot());
+    bindOsSelect();
+    on('s-yes', function () { go('screen_enter'); });
+    on('s-no', function () { go('log_ask'); });
+  };
 
   function batteryFields() {
     return '<div class="card">' +
@@ -286,282 +609,161 @@
       '<label class="field">Ciklusszám<input type="number" id="cycles" inputmode="numeric" min="0" max="5000" value="' + esc(state.vals.cycles) + '"><small>Ha nem látod, hagyd üresen.</small></label>' +
       '</div><div id="msg"></div>';
   }
-
   function batteryNext() {
     var cap = state.vals.capacity.trim(), cyc = state.vals.cycles.trim();
     if (cap && toInt(cap, 40, 100) === null) { message('msg', '<div class="error">A kapacitás 40 és 100 közötti szám legyen.</div>'); return; }
     if (cyc && toInt(cyc, 0, 5000) === null) { message('msg', '<div class="error">A ciklusszám 0 és 5000 közötti egész szám legyen.</div>'); return; }
-    details();
+    go('details');
+  }
+  function clearBattery() {
+    state.vals.cycles = ''; state.vals.capacity = '';
+    state.parsed = {}; state.extra.fileDate = '';
   }
 
-  function osSelect() {
-    var options = '';
-    for (var i = 0; i < OS_ORDER.length; i++) {
-      options += '<option value="' + OS_ORDER[i] + '"' + (state.osFamily === OS_ORDER[i] ? ' selected' : '') + '>' + OS_LABELS[OS_ORDER[i]] + '</option>';
-    }
-    var note = state.detectedOs
-      ? 'Automatikusan felismertük: ' + esc(state.detectedOs) + '. Ha nem ez a helyes, válaszd ki a megfelelőt.'
-      : 'Nem sikerült automatikusan felismerni. Válaszd ki a rendszerverziót (Beállítások &gt; Általános &gt; Névjegy).';
-    return '<div class="card"><label class="field">Rendszerverzió<select id="osfam">' + options + '</select><small>' + note + '</small></label></div>';
-  }
+  SCREENS.screen_enter = function () {
+    show(top() + progress(2) +
+      '<h1>Írd be a két számot</h1>' +
+      '<p class="lead">A <b>maximális kapacitás</b> százalékban, a <b>ciklusszám</b> egész szám. Ha az egyiket nem látod, hagyd üresen.</p>' +
+      batteryFields() + foot('next', 'Tovább') +
+      '<p><button type="button" class="link" id="skip">Ezt most kihagyom</button></p>');
+    bindInput('capacity', 'capacity'); bindInput('cycles', 'cycles');
+    on('next', batteryNext);
+    on('skip', function () { clearBattery(); go('details'); });
+  };
 
-  function pasteSteps(s) {
-    return '<h2>Az akkumulátor adatai a rendszernaplóból</h2>' +
-      '<p>Az eszköz a ciklusszámot egy diagnosztikai naplóban tárolja. Ezt a naplót másolod ide, az oldal csak ezen az eszközön olvassa ki belőle a ciklusszámot és a kapacitást. Csak akkor folytasd, ha az eszközön már van ilyen napló. Ha nincs, ne kapcsolj be semmit: jelezd lent, és az akkumulátor adatát USB-kábellel, egy számítógépen futó kis programmal olvassuk ki.</p>' +
+  /* ---- akku, iPad és iPhone: napló vagy fájl ---- */
+
+  SCREENS.log_ask = function () {
+    var s = current();
+    show(top() + progress(2) +
+      '<h1>Keresd meg a rendszernaplót</h1>' +
+      '<p class="lead">' + (s.batteryScreen ? '' : 'Ezen a rendszerverzión a Beállítások nem mutatja az akkumulátor állapotát. ') +
+        'Az eszköz a ciklusszámot egy ' + (s.paste ? 'diagnosztikai naplóban' : 'analitikai fájlban') + ' tárolja. Csak akkor folytasd, ha az eszközön már van ilyen bejegyzés. Ha nincs, <b>ne kapcsolj be semmit</b>.</p>' +
+      osSelect() +
       '<ol class="steps">' +
         '<li>Nyisd meg: ' + s.path + '.</li>' +
-        '<li>' + s.list + '<br><button type="button" class="link" id="no-log">Nincs ilyen bejegyzés</button><div id="nolog-msg"></div></li>' +
-        '<li>Érintsd meg hosszan a szöveget, válaszd a <b>Mindet kijelöl</b> (Select All), majd a <b>Másolás</b> (Copy) lehetőséget.</li>' +
+        '<li>' + s.list + '</li>' +
+      '</ol>' +
+      choice('l-found', 'Megtaláltam a bejegyzést', s.paste ? 'Kimásolod a szövegét, és bemásolod ide.' : 'Elmented a Fájlokba, és kiválasztod itt.', false) +
+      choice('l-none', 'Nincs ilyen bejegyzés', 'Semmit nem kell bekapcsolnod, megmutatjuk, mi a teendő.', false) +
+      foot());
+    bindOsSelect();
+    on('l-found', function () { go(current().paste ? 'log_paste' : 'log_file'); });
+    on('l-none', function () { go('nolog'); });
+  };
+
+  SCREENS.log_paste = function () {
+    show(top() + progress(2) +
+      '<h1>A napló kimásolása</h1>' +
+      '<ol class="steps">' +
+        '<li>Nyisd meg a legfrissebb bejegyzést, érintsd meg hosszan a szöveget, válaszd a <b>Mindet kijelöl</b> (Select All), majd a <b>Másolás</b> (Copy) lehetőséget.</li>' +
         '<li>Térj vissza ide, érintsd meg hosszan az alábbi mezőt, válaszd a <b>Beillesztés</b> (Paste) lehetőséget, majd koppints a Beolvasás gombra:' +
           '<label class="field"><textarea id="paste" placeholder="Ide illeszd be a napló szövegét" spellcheck="false"></textarea></label>' +
           '<button type="button" class="btn small" id="parse-log">Beolvasás</button></li>' +
       '</ol>' +
       '<div class="note">A beillesztett szöveget a beolvasás után töröljük a mezőből. Belőle kizárólag a ciklusszámot, a kapacitást, a rendszerverziót és a napló dátumát vesszük ki. Ha más adat is van benne (például alkalmazások nevei), azt nem olvassuk ki és nem küldjük el.</div>' +
-      '<div id="fileResult"></div>';
-  }
-
-  function fileSteps(s) {
-    return '<h2>Az akkumulátor adatai a rendszerfájlból</h2>' +
-      '<p>Az eszköz a ciklusszámot egy analitikai fájlban tárolja. Ezt a fájlt választod ki az oldalon. Az oldal csak ezen az eszközön olvassa, nem tölti fel. Csak akkor folytasd, ha az eszközön már van ilyen fájl. Ha nincs, ne kapcsolj be semmit: jelezd lent, és az akkumulátor adatát USB-kábellel, egy számítógépen futó kis programmal olvassuk ki.</p>' +
-      '<ol class="steps">' +
-        '<li>Nyisd meg: ' + s.path + '.</li>' +
-        '<li>' + s.list + '<br><button type="button" class="link" id="no-log">Nincs ilyen bejegyzés</button><div id="nolog-msg"></div></li>' +
-        '<li>Nyisd meg, koppints a <b>Megosztás</b> gombra, majd a <b>Mentés a Fájlokba</b> pontra.</li>' +
-        '<li>Térj vissza ide, és válaszd ki a mentett fájlt:<br><input type="file" id="file"></li>' +
-      '</ol>' +
-      '<div class="note">A fájlból kizárólag a ciklusszámot, a kapacitást, a rendszerverziót és a fájl dátumát vesszük ki. Ha más adat is van benne (például alkalmazások nevei), azt nem olvassuk ki és nem küldjük el.</div>' +
-      '<div id="fileResult"></div>';
-  }
-
-  function usbSteps() {
-    var link = window.USB_TOOL_URL
-      ? '<a href="' + esc(window.USB_TOOL_URL) + '" target="_blank" rel="noopener">a kiolvasó program letöltése</a>'
-      : 'a kiolvasó program (a letöltési linket a vásárló küldi)';
-    return '<h2>Az akkumulátor adatai USB-vel</h2>' +
-      '<p>A kiolvasó program csak olvas, nem csatlakozik az internetre, és semmit nem küld el. Az eredményt te másolod ide, és az előnézetben látod, mi megy tovább.</p>' +
-      '<ol class="steps">' +
-        '<li>Töltsd le a számítógépedre: ' + link + '. Windowson az Apple USB-illesztőprogramja is kell (iTunes vagy Apple Devices alkalmazás), Macen nem.</li>' +
-        '<li>Kösd az eszközt USB-kábellel a számítógéphez, oldd fel, és ha megkérdezi, koppints a <b>Megbízom</b> gombra.</li>' +
-        '<li>Futtasd a programot. Pár másodperc múlva kiír egy rövid szöveget, ami <b>IPAD-AUDIT-USB</b> sorral kezdődik és <b>END</b> sorral végződik. Másold ki az egészet.</li>' +
-        '<li>Illeszd be ide, és koppints a Beolvasás gombra:' +
-          '<label class="field"><textarea id="usb-paste" placeholder="Ide illeszd be a program kimenetét" spellcheck="false"></textarea></label>' +
-          '<button type="button" class="btn small" id="parse-usb">Beolvasás</button></li>' +
-      '</ol>' +
-      '<div class="note">A beillesztett szöveget a beolvasás után töröljük a mezőből. Csak a modellt, a rendszerverziót, a tárhelyet, a sorozatszámot, az akkumulátor adatait és az Aktiválási zár állapotát vesszük ki belőle.</div>' +
-      '<div id="fileResult"></div>';
-  }
-
-  function applyUsbText(text) {
-    var r = P.parseUsbOutput(String(text));
-    if (!r.valid) {
-      message('fileResult', '<div class="error">Ebben a szövegben nem találtuk a program kimenetét. Ellenőrizd, hogy az <b>IPAD-AUDIT-USB</b> sortól az <b>END</b> sorig mindent bemásoltál-e, vagy futtasd újra a programot.</div>');
-      return;
-    }
-    state.parsed = {};
-    state.noLog = false;
-    function put(key, value) {
-      if (value === '' || value === null || value === undefined) return;
-      state.parsed[key] = String(value); state.vals[key] = String(value);
-    }
-    put('cycles', r.cycles); put('capacity', r.capacity); put('os', r.os); put('serial', r.serial);
-    put('storage', r.storage); put('model', r.modelName || r.model);
-    state.extra.activationLock = r.activationLock;
-    state.extra.modelId = r.modelName ? r.model : '';
-    save();
-    if ($('cycles')) $('cycles').value = state.vals.cycles;
-    if ($('capacity')) $('capacity').value = state.vals.capacity;
-    var lock = r.activationLock === 'Enabled' ? 'bekapcsolva' : (r.activationLock === 'Disabled' ? 'kikapcsolva' : 'nem olvasható ki');
-    message('fileResult', '<div class="result"><dl>' +
-      '<dt>Modell</dt><dd>' + esc(r.modelName ? r.modelName + ' (' + r.model + ')' : (r.model || 'nem található')) + '</dd>' +
-      '<dt>Rendszer</dt><dd>' + esc(r.os || 'nem található') + '</dd>' +
-      '<dt>Ciklusszám</dt><dd>' + esc(r.cycles === null ? 'nem található' : r.cycles) + '</dd>' +
-      '<dt>Maximális kapacitás</dt><dd>' + esc(r.capacity === null ? 'nem található' : r.capacity + '%') + '</dd>' +
-      '<dt>Aktiválási zár</dt><dd>' + esc(lock) + '</dd>' +
-      '</dl></div><div class="success">Kész. A szöveget töröltük a mezőből. Az értékeket lent javíthatod.</div>');
-  }
-
-  function dataIos() {
-    var s = current();
-    var r = state.route;
-    if (!s.batteryScreen && r !== 'usb') r = state.route = 'file';
-    var html = top() + progress(2) +
-      '<h1>Az akkumulátor állapota</h1>' +
-      '<p class="lead">Két számot keresünk: a <b>ciklusszámot</b> (hányszor töltötték fel teljesen) és a <b>maximális kapacitást</b> (az eredeti kapacitás hány százalékát tudja még tárolni).</p>' +
-      osSelect();
-    if (USB_ENABLED) {
-      html += '<h2>Van számítógéped?</h2>' +
-        '<p>Ha igen, egy kis programmal USB-kábelen át kiolvashatjuk az akku adatát. Ez a legpontosabb, és minden eszközön működik.</p>' +
-        choice('r-usb', 'Igen, USB-vel olvasom ki', 'Letöltesz egy kis programot, és a kimenetét bemásolod ide.', r === 'usb');
-    }
-    if (s.batteryScreen) {
-      html += '<h2>Látod az akku állapotát a Beállításokban?</h2>' +
-        '<p>Nyisd meg: <b>Beállítások &gt; Akkumulátor &gt; Akkumulátor állapota</b>. Nem minden iPad és iPhone mutatja ezt.</p>' +
-        choice('r-screen', 'Igen, látom a számokat', 'Beírod a két értéket.', r === 'screen') +
-        choice('r-file', 'Nem, ilyen képernyőt nem látok', 'Az eszköz egy rendszernaplóból is megadja őket. Végigvezetünk rajta.', r === 'file');
-    } else {
-      html += '<div class="note">Ezen a rendszerverzión a Beállítások nem mutatja az akkumulátor állapotát. Az eszköz egy rendszernaplóból adja meg a ciklusszámot, ehhez végigvezetünk.</div>';
-    }
-    if (r === 'usb') html += usbSteps();
-    else if (r === 'file') html += s.paste ? pasteSteps(s) : fileSteps(s);
-    if (r) html += batteryFields();
-    html += nav('back', r ? 'next' : '', 'Tovább');
-    if (r) html += '<p><button type="button" class="link" id="skip">Ezt most kihagyom</button></p>';
-    show(html);
-    on('r-screen', function () { state.route = 'screen'; dataIos(); });
-    on('r-file', function () { state.route = 'file'; dataIos(); });
-    on('r-usb', function () { state.route = 'usb'; dataIos(); });
-    on('parse-usb', function () {
-      var area = $('usb-paste');
-      applyUsbText(area ? area.value : '');
-      if (area) area.value = '';
-    });
-    on('back', kind);
-    on('next', batteryNext);
-    on('skip', function () { state.vals.cycles = ''; state.vals.capacity = ''; details(); });
-    bindInput('capacity', 'capacity'); bindInput('cycles', 'cycles');
-    var select = $('osfam');
-    if (select) select.addEventListener('change', function () { state.osFamily = this.value; dataIos(); });
-    var file = $('file');
-    if (file) file.addEventListener('change', onFile);
+      '<div id="result"></div>' + foot());
     on('parse-log', function () {
       var area = $('paste');
       applyIpadText(area ? area.value : '');
       if (area) area.value = '';
     });
-    on('no-log', function () {
-      state.noLog = true; state.parsed = {};
-      state.vals.cycles = ''; state.vals.capacity = '';
-      save();
-      if ($('cycles')) $('cycles').value = '';
-      if ($('capacity')) $('capacity').value = '';
-      message('nolog-msg', '<div class="note">Rendben, nem kell semmit bekapcsolnod. Ennél az eszköznél az akkumulátor adatát egy USB-kábellel a számítógépre kötött kis program tudja kiolvasni. Ehhez a vevő külön útmutatót ad. A többi adatot addig is kitöltheted.</div>' +
-        '<button type="button" class="btn" id="no-log-next">Tovább</button>');
-      on('no-log-next', details);
-    });
-  }
+  };
 
-  function applyIpadText(text) {
-    var r = P.parseIpadFile(String(text));
-    var what = current().paste ? 'szöveg' : 'fájl';
-    state.parsed = {};
-    state.noLog = false;
-    if (r.cycles !== null) { state.parsed.cycles = String(r.cycles); state.vals.cycles = String(r.cycles); }
-    if (r.capacity !== null) { state.parsed.capacity = String(r.capacity); state.vals.capacity = String(r.capacity); }
-    if (r.os) { state.parsed.os = r.os; state.vals.os = r.os; }
-    state.extra.fileDate = r.fileDate;
-    save();
-    if ($('cycles')) $('cycles').value = state.vals.cycles;
-    if ($('capacity')) $('capacity').value = state.vals.capacity;
-    if (r.cycles === null && r.capacity === null) {
-      message('fileResult', '<div class="error">Ebben a ' + what + 'ben nem találtunk akkumulátor adatot. Próbáld a következő legfrissebb bejegyzést, vagy írd be az értékeket lent kézzel, ha látod őket valahol.</div>');
-      return;
-    }
-    message('fileResult', '<div class="result"><dl>' +
-      '<dt>Ciklusszám</dt><dd>' + esc(r.cycles === null ? 'nem található' : r.cycles) + '</dd>' +
-      '<dt>Maximális kapacitás</dt><dd>' + esc(r.capacity === null ? 'nem található' : r.capacity + '%') + '</dd>' +
-      (r.fileDate ? '<dt>A ' + what + ' kelte</dt><dd>' + esc(r.fileDate) + '</dd>' : '') +
-      '</dl></div><div class="success">Kész. A ' + what + ' nem hagyta el az eszközt. Az értékeket lent javíthatod.</div>');
-  }
+  SCREENS.log_file = function () {
+    show(top() + progress(2) +
+      '<h1>A fájl kiválasztása</h1>' +
+      '<ol class="steps">' +
+        '<li>Nyisd meg a legfrissebb bejegyzést, koppints a <b>Megosztás</b> gombra, majd a <b>Mentés a Fájlokba</b> pontra.</li>' +
+        '<li>Térj vissza ide, és válaszd ki a mentett fájlt:<br><input type="file" id="file"></li>' +
+      '</ol>' +
+      '<div class="note">A fájlból kizárólag a ciklusszámot, a kapacitást, a rendszerverziót és a fájl dátumát vesszük ki. Ha más adat is van benne (például alkalmazások nevei), azt nem olvassuk ki és nem küldjük el.</div>' +
+      '<div id="result"></div>' + foot());
+    var file = $('file');
+    if (file) file.addEventListener('change', onFile);
+  };
 
-  function onFile(event) {
-    var file = event.target.files && event.target.files[0];
-    if (!file) return;
-    if (file.size > MAX_FILE) { message('fileResult', '<div class="error">A fájl túl nagy. Válassz másikat.</div>'); return; }
-    message('fileResult', '<p class="muted">Olvasás...</p>');
-    var reader = new FileReader();
-    reader.onload = function () { applyIpadText(reader.result); };
-    reader.onerror = function () { message('fileResult', '<div class="error">A fájl nem olvasható. Válassz másikat.</div>'); };
-    reader.readAsText(file);
-  }
+  SCREENS.nolog = function () {
+    show(top() + progress(2) +
+      '<h1>Nincs baj, erre van megoldás</h1>' +
+      '<p class="lead">Semmit nem kell bekapcsolnod az eszközön. Ennél az eszköznél az akkumulátor adatát egy USB-kábellel a számítógépre kötött kis program tudja kiolvasni.</p>' +
+      choice('n-usb', 'Van számítógépem, USB-vel kiolvasom', 'Letöltesz egy kis programot, és a kimenetét bemásolod ide.', false) +
+      choice('n-skip', 'Kihagyom az akkumulátort', 'A vásárló a riportban látni fogja, hogy erre az adatra még szükség van.', false) +
+      foot());
+    on('n-usb', function () { go(ON_COMPUTER ? 'usb_get' : 'usb_switch'); });
+    on('n-skip', function () { clearBattery(); state.noLog = true; go('details'); });
+  };
 
-  function dataMac() {
-    if (!state.route) state.route = 'command';
-    var html = top() + progress(2) + '<h1>A Mac adatai</h1>';
-    if (state.route === 'manual') {
-      html +=
-        '<p class="lead">Az akkumulátor adatait a Rendszerinformációban is megtalálod.</p>' +
-        '<ol class="steps">' +
-          '<li>Tartsd lenyomva az <b>Option</b> billentyűt, és kattints az Apple menüre, majd a <b>Rendszerinformáció</b> pontra.</li>' +
-          '<li>A bal oldalon nyisd meg az <b>Áramellátás</b> pontot.</li>' +
-          '<li>Írd be a <b>ciklusszámot</b> és a <b>maximális kapacitást</b> (ha nincs, hagyd üresen).</li>' +
-        '</ol>' + batteryFields() +
-        '<p><button type="button" class="link" id="to-command">Mégis futtatom a parancsot</button></p>';
-    } else {
-      var parts = [
-        ['<code>sw_vers -productVersion</code>', 'a macOS verziószáma'],
-        ['<code>system_profiler -xml SPHardwareDataType</code> és <code>grep</code>', 'a Mac típusa, chipje, memóriája, sorozatszáma és az Aktiválási zár állapota. A gép nevét, az azonosítókat és a hálózati adatokat nem írja ki.'],
-        ['<code>system_profiler -xml SPPowerDataType</code> és <code>grep</code>', 'az akkumulátor ciklusszáma, állapota és maximális kapacitása'],
-        ['<code>profiles status -type enrollment</code> és <code>grep</code>', 'csak két igen/nem válasz arról, van-e céges vagy iskolai felügyelet. A szervezet nevét és a szerver címét nem írja ki.'],
-        ['<code>df -k</code> és <code>tail</code>', 'a tárhely mérete']
-      ];
-      var rows = '';
-      for (var i = 0; i < parts.length; i++) rows += '<tr><td>' + parts[i][0] + '</td><td>' + parts[i][1] + '</td></tr>';
-      html +=
-        '<p class="lead">A Mac az akkumulátor és a hardver adatait a Rendszerinformációban tárolja. Egy rövid parancs kiolvassa ezeket, a kimenetet pedig te másolod ide. Így pontosan látod, mi megy tovább.</p>' +
-        '<div class="card"><h3>Mit csinál a parancs?</h3><ul class="marks yes">' +
-          '<li>Csak olvas, semmit nem módosít és nem telepít.</li>' +
-          '<li>Nem csatlakozik az internetre.</li>' +
-          '<li>Nem kér jelszót. Ha bármi jelszót kér, állj meg, és ne add meg.</li>' +
-          '<li>Csak a felsorolt adatokat írja ki.</li>' +
-        '</ul></div>' +
-        '<ol class="steps">' +
-          '<li>Nyisd meg a <b>Terminált</b>: nyomd meg a <b>Cmd + Szóköz</b> billentyűt, írd be, hogy <b>Terminal</b>, majd nyomj Entert.</li>' +
-          '<li>Másold ki az alábbi parancsot, illeszd be a Terminálba, és nyomj <b>Entert</b>. Pár másodpercig dolgozik.' +
-            '<pre class="code" id="cmd">' + esc(MAC_COMMAND) + '</pre>' +
-            '<button type="button" class="btn small" id="copy">Parancs másolása</button><span class="muted" id="copied"></span></li>' +
-          '<li>Jelöld ki a Terminál teljes szövegét (<b>Cmd + A</b>), másold ki (<b>Cmd + C</b>), és illeszd be ide:' +
-            '<label class="field"><textarea id="paste" placeholder="Ide illeszd be a Terminál szövegét" spellcheck="false"></textarea></label>' +
-            '<button type="button" class="btn small" id="parse">Beolvasás</button></li>' +
-        '</ol>' +
-        '<div id="parsed"></div>' +
-        '<details><summary>Mit jelentenek a parancs részei?</summary><div class="tablewrap"><table><thead><tr><th>Rész</th><th>Mit olvas</th></tr></thead><tbody>' + rows + '</tbody></table></div></details>' +
-        '<p><button type="button" class="link" id="to-manual">Inkább nem futtatok parancsot</button></p>';
-    }
-    html += nav('back', 'next', 'Tovább');
-    show(html);
-    on('back', kind);
-    on('next', batteryNext);
-    on('to-manual', function () { state.route = 'manual'; state.parsed = {}; dataMac(); });
-    on('to-command', function () { state.route = 'command'; dataMac(); });
+  /* ---- akku, Mac ---- */
+
+  SCREENS.mac_run = function () {
+    var parts = [
+      ['<code>sw_vers -productVersion</code>', 'a macOS verziószáma'],
+      ['<code>system_profiler -xml SPHardwareDataType</code> és <code>grep</code>', 'a Mac típusa, chipje, memóriája, sorozatszáma és az Aktiválási zár állapota. A gép nevét, az azonosítókat és a hálózati adatokat nem írja ki.'],
+      ['<code>system_profiler -xml SPPowerDataType</code> és <code>grep</code>', 'az akkumulátor ciklusszáma, állapota és maximális kapacitása'],
+      ['<code>profiles status -type enrollment</code> és <code>grep</code>', 'csak két igen/nem válasz arról, van-e céges vagy iskolai felügyelet. A szervezet nevét és a szerver címét nem írja ki.'],
+      ['<code>df -k</code> és <code>tail</code>', 'a tárhely mérete']
+    ];
+    var rows = '';
+    for (var i = 0; i < parts.length; i++) rows += '<tr><td>' + parts[i][0] + '</td><td>' + parts[i][1] + '</td></tr>';
+    show(top() + progress(2) +
+      '<h1>A Mac adatai</h1>' +
+      '<p class="lead">A Mac az akkumulátor és a hardver adatait a Rendszerinformációban tárolja. Egy rövid parancs kiolvassa ezeket, a kimenetet pedig te másolod ide. Így pontosan látod, mi megy tovább.</p>' +
+      '<div class="card"><h3>Mit csinál a parancs?</h3><ul class="marks yes">' +
+        '<li>Csak olvas, semmit nem módosít és nem telepít.</li>' +
+        '<li>Nem csatlakozik az internetre.</li>' +
+        '<li>Nem kér jelszót. Ha bármi jelszót kér, állj meg, és ne add meg.</li>' +
+        '<li>Csak a felsorolt adatokat írja ki.</li>' +
+      '</ul></div>' +
+      '<ol class="steps">' +
+        '<li>Nyisd meg a <b>Terminált</b>: nyomd meg a <b>Cmd + Szóköz</b> billentyűt, írd be, hogy <b>Terminal</b>, majd nyomj Entert.</li>' +
+        '<li>Másold ki az alábbi parancsot, illeszd be a Terminálba, és nyomj <b>Entert</b>. Pár másodpercig dolgozik.' +
+          '<pre class="code" id="cmd">' + esc(MAC_COMMAND) + '</pre>' +
+          '<button type="button" class="btn small" id="copy">Parancs másolása</button><span class="muted" id="copied"></span></li>' +
+      '</ol>' +
+      '<details><summary>Mit jelentenek a parancs részei?</summary><div class="tablewrap"><table><thead><tr><th>Rész</th><th>Mit olvas</th></tr></thead><tbody>' + rows + '</tbody></table></div></details>' +
+      '<p><button type="button" class="link" id="to-manual">Inkább nem futtatok parancsot</button></p>' +
+      foot('m-next', 'Lefuttattam, tovább'));
     on('copy', function () {
       copyText(MAC_COMMAND, function (ok) {
         message('copied', ok ? ' Kimásolva.' : ' Nem sikerült. Jelöld ki a parancsot, és másold ki kézzel.');
       });
     });
+    on('to-manual', function () { go('mac_manual'); });
+    on('m-next', function () { go('mac_paste'); });
+  };
+
+  SCREENS.mac_paste = function () {
+    show(top() + progress(2) +
+      '<h1>A Terminál szövegének beillesztése</h1>' +
+      '<ol class="steps">' +
+        '<li>Jelöld ki a Terminál teljes szövegét (<b>Cmd + A</b>), és másold ki (<b>Cmd + C</b>).</li>' +
+        '<li>Illeszd be ide, és koppints a Beolvasás gombra:' +
+          '<label class="field"><textarea id="paste" placeholder="Ide illeszd be a Terminál szövegét" spellcheck="false"></textarea></label>' +
+          '<button type="button" class="btn small" id="parse">Beolvasás</button></li>' +
+      '</ol>' +
+      '<div id="result"></div>' + foot());
     on('parse', parseMac);
+  };
+
+  SCREENS.mac_manual = function () {
+    show(top() + progress(2) +
+      '<h1>Az akkumulátor adatai kézzel</h1>' +
+      '<p class="lead">Az akkumulátor adatait a Rendszerinformációban is megtalálod.</p>' +
+      '<ol class="steps">' +
+        '<li>Tartsd lenyomva az <b>Option</b> billentyűt, és kattints az Apple menüre, majd a <b>Rendszerinformáció</b> pontra.</li>' +
+        '<li>A bal oldalon nyisd meg az <b>Áramellátás</b> pontot.</li>' +
+        '<li>Írd be a <b>ciklusszámot</b> és a <b>maximális kapacitást</b> (ha nincs, hagyd üresen).</li>' +
+      '</ol>' + batteryFields() + foot('next', 'Tovább') +
+      '<p><button type="button" class="link" id="to-command">Mégis futtatom a parancsot</button></p>');
     bindInput('capacity', 'capacity'); bindInput('cycles', 'cycles');
-  }
+    on('next', batteryNext);
+    on('to-command', function () { go('mac_run'); });
+  };
 
-  function parseMac() {
-    var r = P.parseMacOutput($('paste') ? $('paste').value : '');
-    if (!r.valid) {
-      message('parsed', '<div class="error">Ebben a szövegben nem találtuk a parancs kimenetét. Ellenőrizd, hogy a teljes Terminál-szöveget másoltad ki, vagy futtasd újra a parancsot.</div>');
-      return;
-    }
-    state.parsed = {};
-    function put(key, val) {
-      if (val === '' || val === null || val === undefined) return;
-      state.parsed[key] = String(val); state.vals[key] = String(val);
-    }
-    put('model', r.model); put('chip', r.chip); put('memory', r.memory); put('storage', r.storage); put('os', r.os);
-    put('serial', r.serial); put('cycles', r.cycles); put('capacity', r.capacity);
-    state.extra = { condition: r.condition, fileDate: '', activationLock: r.activationLock, dep: r.dep, mdm: r.mdm, modelId: r.modelId };
-    $('paste').value = '';
-    function line(label, val) { return '<dt>' + label + '</dt><dd>' + esc(val === '' || val === null ? 'nem található' : val) + '</dd>'; }
-    var lock = r.activationLock === 'Enabled' ? 'bekapcsolva' : (r.activationLock === 'Disabled' ? 'kikapcsolva' : '');
-    var mdm = r.dep === null && r.mdm === null ? '' : ((r.dep || r.mdm) ? 'van' : 'nincs');
-    message('parsed', '<div class="result"><dl>' +
-      line('Modell', r.model ? r.model + (r.modelId ? ' (' + r.modelId + ')' : '') : '') + line('Chip', r.chip) + line('Memória', r.memory) +
-      line('Tárhely', r.storage) + line('macOS', r.os) + line('Ciklusszám', r.cycles) +
-      line('Maximális kapacitás', r.capacity === null ? '' : r.capacity + '%') + line('Akku állapota', r.condition) +
-      line('Aktiválási zár', lock) + line('Céges felügyelet', mdm) + line('Sorozatszám', r.serial) +
-      '</dl></div><div class="success">Kész. A beillesztett szöveget töröltük a mezőből, csak a fenti értékeket használjuk.</div>');
-    if ($('capacity')) $('capacity').value = state.vals.capacity;
-    if ($('cycles')) $('cycles').value = state.vals.cycles;
-  }
+  /* ---- az eszköz adatai, előnézet, küldés ---- */
 
-  function details() {
-    state.step = 'details';
+  SCREENS.details = function () {
     var v = state.vals, mac = state.kind === 'mac', cur = current();
     show(top() + progress(3) +
       '<h1>Az eszköz adatai</h1>' +
@@ -580,23 +782,21 @@
       '<label class="radio"><input type="radio" name="apple" value="yes"' + (state.apple === 'yes' ? ' checked' : '') + '> Kijelentkeztem, és a Keresés funkció ki van kapcsolva</label>' +
       '<label class="radio"><input type="radio" name="apple" value="no"' + (state.apple === 'no' ? ' checked' : '') + '> Még nem jelentkeztem ki</label>' +
       '<label class="radio"><input type="radio" name="apple" value="unsure"' + (state.apple === 'unsure' ? ' checked' : '') + '> Nem vagyok biztos benne</label>' +
-      '<div id="msg"></div>' + nav('back', 'next', 'Tovább'));
+      '<div id="msg"></div>' + foot('next', 'Tovább'));
     bindInput('f-model', 'model'); bindInput('f-storage', 'storage'); bindInput('f-os', 'os'); bindInput('f-serial', 'serial');
     $('share').addEventListener('change', function () { state.shareSerial = this.checked; });
     var radios = app.querySelectorAll('input[name=apple]');
     for (var i = 0; i < radios.length; i++) radios[i].addEventListener('change', function () { state.apple = this.value; });
-    on('back', data);
     on('next', function () {
       if (state.vals.serial.trim() && !P.normalizeSerial(state.vals.serial)) {
         message('msg', '<div class="error">A sorozatszám 8 és 14 karakter hosszú, betűkből és számokból áll.</div>'); return;
       }
       if (!state.apple) { message('msg', '<div class="error">Válaszd ki, hogy ki vagy-e jelentkezve az Apple-fiókodból.</div>'); return; }
-      review();
+      go('review');
     });
-  }
+  };
 
-  function review() {
-    state.step = 'review';
+  SCREENS.review = function () {
     var d = collect();
     var sections = P.buildSections(d);
     var html = top() + progress(4) +
@@ -619,10 +819,9 @@
       '<div class="nav"><button type="button" class="btn secondary" id="back">Vissza</button>' +
       '<button type="button" class="btn" id="send" disabled>Küldés</button></div>';
     show(html);
-    on('back', details);
     $('consent').addEventListener('change', function () { $('send').disabled = !this.checked; });
     on('send', function () { send(sections, d); });
-  }
+  };
 
   function post(payload) {
     var body = JSON.stringify(payload);
@@ -644,15 +843,15 @@
   function serverError(text) { var e = new Error(text); e.fromServer = true; return e; }
 
   function send(sections, d) {
-    if (state.sending) return;
+    if (state.sending || state.sent) return;
     var serialField = d.fingerprint || 'nincs';
     if (DEMO) { done(sections); return; }
-    if (!window.BACKEND_URL) { message('msg', '<div class="error">Az oldal nincs beállítva. Szólj a vásárlónak.</div>'); return; }
+    if (!window.BACKEND_URL) { message('msg', '<div class="error">Az oldal nincs beállítva, a küldés most nem lehetséges.</div>'); return; }
     state.sending = true;
     $('send').disabled = true;
     message('msg', '<p class="muted">Küldés...</p>');
     var started = state.sid ? Promise.resolve(state.sid) : post({ action: 'start', code: CODE }).then(function (r) {
-      if (!r || !r.ok) throw serverError((r && r.error ? r.error : 'A link nem érvényes.') + ' Kérj új linket a vásárlótól.');
+      if (!r || !r.ok) throw serverError((r && r.error ? r.error : 'A link nem érvényes.') + ' Új meghívókódra van szükséged.');
       state.sid = r.sid;
       return r.sid;
     });
@@ -664,28 +863,38 @@
       done(sections);
     }).catch(function (error) {
       state.sending = false;
-      $('send').disabled = false;
+      if ($('send')) $('send').disabled = false;
       message('msg', '<div class="error">' + esc(error && error.fromServer ? error.message : 'Nincs kapcsolat a szerverrel. Ellenőrizd az internetet, és próbáld újra a Küldés gombbal.') + '</div>');
     });
   }
 
+  // Küldés után a Vissza nem hozza vissza az előnézetet: a render mindig a záró képernyőt mutatja, és semmi nem mentődik.
   function done(sections) {
-    var html = top() + '<h1>Köszönjük!</h1>' +
-      '<div class="success">Az adatok elmentek a vásárlónak. Az oldalt bezárhatod.</div>' +
-      '<p>Ezen az eszközön nem tároltunk semmit.</p>';
-    if (DEMO) {
-      html += '<details><summary>Ezt küldtük volna (próbaüzem)</summary><pre class="code">' + esc(JSON.stringify(sections, null, 2)) + '</pre></details>';
-    }
-    show(html);
+    state.sent = true;
+    state.demoSections = DEMO ? sections : null;
+    go('done');
     forget();
   }
 
-  var STEPS = { welcome: welcome, kind: kind, data: data, details: details, review: review };
+  SCREENS.done = function () {
+    var html = top() + '<h1>Köszönjük!</h1>' +
+      '<div class="success">Az adatok elmentek a vásárlónak. Az oldalt bezárhatod.</div>' +
+      '<p>Ezen az eszközön nem tároltunk semmit.</p>';
+    if (DEMO && state.demoSections) {
+      html += '<details><summary>Ezt küldtük volna (próbaüzem)</summary><pre class="code">' + esc(JSON.stringify(state.demoSections, null, 2)) + '</pre></details>';
+    }
+    show(html);
+  };
 
-  var detected = P.detectOs(navigator.userAgent, navigator.maxTouchPoints || 0);
+  /* ---------- indítás ---------- */
+
+  var detected = DEVICE;
   var restored = restore();
+  if (!restored) { state.path = ['welcome']; state.idx = 0; state.step = 'welcome'; }
   if (detected) state.detectedOs = detected.version;
   if (!state.osFamily) state.osFamily = detected ? familyOf(detected.major) : 'latest';
   if (detected && !state.vals.os) state.vals.os = detected.version;
-  if (restored) STEPS[state.step](); else welcome();
+  try { history.replaceState({ idx: state.idx }, ''); } catch (e) { /* nem baj */ }
+  window.addEventListener('popstate', onPop);
+  render();
 })();
