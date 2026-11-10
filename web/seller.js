@@ -80,7 +80,18 @@
   }
   function show(html) {
     app.innerHTML = html;
+    // A Vissza gomb mindig a főcím alatt van, így a hosszú oldalakon sem kell lefelé keresni. A láblécből kivesszük.
+    var stale = $('back');
+    while (stale) { stale.parentNode.removeChild(stale); stale = $('back'); }
+    var bars = app.querySelectorAll('.nav');
+    for (var b = 0; b < bars.length; b++) { if (!bars[b].children.length) bars[b].parentNode.removeChild(bars[b]); }
     var title = app.querySelector('h1');
+    if (title && state.idx > 0 && !state.sent) {
+      var row = document.createElement('div');
+      row.className = 'backrow';
+      row.innerHTML = '<button type="button" class="btn secondary small" id="back">← Vissza</button>';
+      title.parentNode.insertBefore(row, title.nextSibling);
+    }
     if (title) { title.setAttribute('tabindex', '-1'); try { title.focus({ preventScroll: true }); } catch (e) { /* régi böngésző */ } }
     window.scrollTo(0, 0);
     on('back', goBack);
@@ -490,7 +501,7 @@
     state.kind = kind;
     if (kind === 'mac') { go('mac_run'); return; }
     if (ON_COMPUTER) { go('usb_get'); return; }
-    go('usb_ask');
+    go(afterUsb());
   }
 
   SCREENS.kind = function () {
@@ -505,17 +516,6 @@
   };
 
   /* ---- akku, iPad és iPhone: USB ---- */
-
-  SCREENS.usb_ask = function () {
-    show(top() + progress(2) +
-      '<h1>Van számítógéped?</h1>' +
-      '<p class="lead">Ha igen, egy kis programmal USB-kábelen át kiolvashatjuk az akkumulátor adatát. Ez a legpontosabb, és minden eszközön működik. Ehhez ezt az oldalt a számítógépen kell megnyitnod, ahová az eszközt rákötöd.</p>' +
-      choice('u-yes', 'Igen, USB-vel olvasom ki', 'Letöltesz egy kis programot, és a kimenetét bemásolod ide.', false) +
-      choice('u-no', 'Nincs, vagy most nem szeretném', 'Akkor a Beállításokból vagy a rendszernaplóból próbáljuk.', false) +
-      foot());
-    on('u-yes', function () { go(ON_COMPUTER ? 'usb_get' : 'usb_switch'); });
-    on('u-no', function () { go(afterUsb()); });
-  };
 
   function macDownloadCommand() {
     var base = TOOL_BASE;
@@ -711,11 +711,9 @@
   SCREENS.nolog = function () {
     show(top() + progress(2) +
       '<h1>Nincs baj, erre van megoldás</h1>' +
-      '<p class="lead">Semmit nem kell bekapcsolnod az eszközön. Ennél az eszköznél az akkumulátor adatát egy USB-kábellel a számítógépre kötött kis program tudja kiolvasni.</p>' +
-      choice('n-usb', 'Van számítógépem, USB-vel kiolvasom', 'Letöltesz egy kis programot, és a kimenetét bemásolod ide.', false) +
-      choice('n-skip', 'Kihagyom az akkumulátort', 'A vásárló a riportban látni fogja, hogy erre az adatra még szükség van.', false) +
+      '<p class="lead">Semmit nem kell bekapcsolnod az eszközön. Előbb végigmegyünk mindenen, amit az oldal a böngészőben meg tud nézni. A végén, ha az akkumulátor adata még hiányzik, felajánlunk egy kis programot, ami USB-kábelen át kiolvassa. Azt te döntöd el, hogy kéred-e.</p>' +
+      choice('n-skip', 'Rendben, tovább', 'Az akkumulátor adata egyelőre hiányzik, ezt a végén pótolhatod.', false) +
       foot());
-    on('n-usb', function () { go(ON_COMPUTER ? 'usb_get' : 'usb_switch'); });
     on('n-skip', function () { clearBattery(); state.noLog = true; go('details'); });
   };
 
@@ -796,12 +794,14 @@
   function hwList() { return HW_FLOW[state.kind === 'mac' ? 'mac' : 'ios']; }
   // Számítógépről az iPad hardverét nem lehet böngészőből tesztelni.
   function hwStart() { return (state.kind === 'ios' && ON_COMPUTER) ? 'review' : 'hw_intro'; }
+  // Az eszközön lefutott böngészős rész után, ha USB-s adat még nincs, jön a "mi maradt" képernyő.
+  function afterHw() { return (state.kind === 'ios' && !ON_COMPUTER && state.route !== 'usb') ? 'remaining' : 'review'; }
   function hwNext() {
     var list = hwList();
     for (var i = 0; i < list.length; i++) {
       if (!state.hw[list[i]]) { go('hw_' + list[i]); return; }
     }
-    go('review');
+    go(afterHw());
   }
   function hwDone(name, status, detail) { state.hw[name] = { status: status, detail: detail || '' }; save(); }
   function hwResult(name) {
@@ -832,7 +832,7 @@
       choice('hw-go', 'Elkezdem', 'Kb. 3 perc. Ne vegyél fel hívást közben.', false) +
       choice('hw-no', 'Kihagyom a hardvertesztet', 'A riportban "nem tesztelt" jelzést kap.', false) + foot());
     on('hw-go', function () { state.hwSkipped = false; hwNext(); });
-    on('hw-no', function () { state.hwSkipped = true; go('review'); });
+    on('hw-no', function () { state.hwSkipped = true; go(afterHw()); });
   };
 
   /* érintőképernyő */
@@ -1132,6 +1132,55 @@
       if (!state.apple) { message('msg', '<div class="error">Válaszd ki, hogy ki vagy-e jelentkezve az Apple-fiókodból.</div>'); return; }
       go(hwStart());
     });
+  };
+
+  /* ---- mi maradt: az USB-s program ajánlata ---- */
+
+  function toUsb() { go(ON_COMPUTER ? 'usb_get' : 'usb_switch'); }
+
+  SCREENS.remaining = function () {
+    var v = state.vals, open = [];
+    if (v.cycles === '' && v.capacity === '') open.push('<li><b>Akkumulátor:</b> nincs adat. A program az eszközből olvassa ki a ciklusszámot és a kapacitást.</li>');
+    else open.push('<li><b>Akkumulátor:</b> amit megadtál vagy a naplóból olvastunk. A program az eszközből méri meg pontosan.</li>');
+    open.push('<li><b>Aktiválási zár:</b> jelenleg csak a te válaszod. A program az eszközből olvassa ki.</li>');
+    open.push('<li><b>Modell és sorozatszám:</b> jelenleg amit beírtál. A program az eszközből olvassa ki.</li>');
+    var missing = [], list = hwList();
+    for (var i = 0; i < list.length; i++) {
+      var r = state.hw[list[i]];
+      if (!r || r.status === 'skipped' || r.status === 'unavailable') missing.push(HW_TITLES[list[i]]);
+    }
+    if (missing.length) open.push('<li><b>Böngészőből nem mérhető volt:</b> ' + esc(missing.join(', ')) + '.</li>');
+    show(top() + progress(4) +
+      '<h1>Ez még nincs ellenőrizve</h1>' +
+      '<p class="lead">A böngészőben mindent megnéztünk, amit lehetett. Az alábbiakat egy böngésző nem tudja megmérni:</p>' +
+      '<ul class="marks open">' + open.join('') + '</ul>' +
+      '<p>Ahhoz, hogy a hardver is tesztelve legyen, egy audit programot kellene telepíteni a számítógépedre, és USB-kábellel rákötni az eszközt. Mielőtt bármit letöltenél, részletesen leírjuk, mit csinál. Te döntesz.</p>' +
+      choice('r-yes', 'Igen, megnézem, mit csinál a program', 'Még nem töltesz le semmit, előbb elolvasod a részleteket.', false) +
+      choice('r-no', 'Nem, így küldöm', 'Ezek a riportban "nem ellenőrzött" jelzést kapnak. Ez rendben van, a vásárló látni fogja, mi mért és mi bemondás.', false) +
+      foot());
+    on('r-yes', function () { go('usb_about'); });
+    on('r-no', function () { go('review'); });
+  };
+
+  SCREENS.usb_about = function () {
+    show(top() + progress(4) +
+      '<h1>Mit csinál a program, és mit kapsz belőle?</h1>' +
+      '<h2>Mit csinál</h2>' +
+      '<ol class="steps"><li>Letöltöd a számítógépedre (nyílt forráskódú, a letöltés előtt megnézheted a kódját és az ellenőrző összegét).</li>' +
+      '<li>Rákötöd az eszközt USB-kábellel, és az eszközön megerősíted a <b>Megbízom</b> kérdést.</li>' +
+      '<li>A program lefut, kiír egy összegzést a képernyőre, és a vágólapra másol egy rövid szöveget. Ezt illeszted be ide.</li></ol>' +
+      '<h2>Mit olvas ki</h2>' +
+      '<ul class="marks yes"><li>modell, rendszerverzió, tárhely</li><li>az akkumulátor ciklusszáma és kapacitása</li><li>az Aktiválási zár állapota</li><li>a sorozatszám (az előnézetben ugyanúgy kikapcsolhatod, mint eddig)</li></ul>' +
+      '<h2>Amit nem olvas ki, és nem is tud</h2>' +
+      '<ul class="marks no"><li>fotók, üzenetek, névjegyek, fájlok, alkalmazások</li><li>Apple-fiók, jelszavak, helyadat, Wi-Fi hálózatok</li><li>eszköznév, IMEI, UDID</li></ul>' +
+      '<p class="muted">A program csak olvas, semmit nem módosít az eszközön, és nem küld el semmit az internetre. Az eredményt te másolod be ide, és az előnézetben látod, mi megy tovább.</p>' +
+      '<h2>Mit kapsz belőle te</h2>' +
+      '<p>A program a te képernyődön is kiírja, mit talált: az akkumulátor valódi kopását és az Aktiválási zár állapotát. Ha az akku gyengébb, mint gondoltad, előbb tudod meg te, mint a vásárló.</p>' +
+      choice('a-go', 'Rendben, letöltöm a programot', 'A következő lépésben megkapod a letöltést.', false) +
+      choice('a-no', 'Mégsem, így küldöm', 'A hardveres részek "nem ellenőrzött" jelzést kapnak a riportban.', false) +
+      foot());
+    on('a-go', toUsb);
+    on('a-no', function () { go('review'); });
   };
 
   SCREENS.review = function () {

@@ -40,6 +40,7 @@ ul.marks li { position: relative; padding-left: 26px; margin: 0 0 8px; font-size
 ul.marks li:before { position: absolute; left: 0; top: 0; font-weight: 700; }
 ul.marks.yes li:before { content: "\2713"; color: var(--good); }
 ul.marks.no li:before { content: "\2715"; color: var(--bad); }
+ul.marks.open li:before { content: "\2022"; }
 ul.plain li { padding-left: 0; margin: 0 0 10px; }
 
 .note { background: var(--soft); border-radius: 12px; padding: 12px 16px; margin: 16px 0; font-size: 17px; }
@@ -54,6 +55,7 @@ button { font: inherit; cursor: pointer; }
 .btn.small { padding: 10px 16px; font-size: 16px; }
 .link { background: none; border: 0; color: var(--accent); text-decoration: underline; padding: 8px 0; font-size: 17px; }
 .nav { margin-top: 22px; }
+.backrow { margin: 0 0 16px; }
 
 .choice { display: block; width: 100%; text-align: left; background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; margin: 12px 0; }
 .choice b { display: block; font-size: 19px; margin-bottom: 4px; }
