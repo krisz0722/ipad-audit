@@ -48,7 +48,8 @@ Data path in seller mode: browser, Google Apps Script, email to the buyer.
 
 - The iPad file reader in the wizard relies on assumed field names (`Last_Value_CycleCount`, `MaximumCapacityPercent`) and still needs to be checked against a real file.
 - The `system_profiler` key names used by the Mac command still need to be checked on a real Mac.
-- The in-browser hardware test (camera, audio, touch) is not part of the seller wizard yet.
+- The in-browser hardware test (touch, motion, audio, camera, display) is part of the wizard. Touch, camera and microphone still need checking on a real device. A test for the buttons and the headphone jack does not exist yet.
+- The wizard does everything it can in the browser first and, if unverified data is left at the end, offers the USB program (yes or no). Results do not yet move from the iPad browser to the computer; that needs a `resume` action in the backend.
 - The wizard targets Safari 9.1 (iOS 9.3.5) and newer, so it uses ES5 only, without `fetch` or `TextEncoder`. The iOS 9.3.5 menu names were checked on a real iPad, the names for other versions come from Apple's Hungarian pages and guides and still need checking on real devices.
 
 ## Development

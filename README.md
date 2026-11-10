@@ -48,7 +48,8 @@ Adatút az eladói módban: böngésző, Google Apps Script, email a vásárlón
 
 - A varázsló iPad-fájl kiolvasója feltételezett mezőnevekre épül (`Last_Value_CycleCount`, `MaximumCapacityPercent`), valódi fájllal még ellenőrizendő.
 - A Mac-parancs `system_profiler` kulcsnevei valódi Macen még ellenőrizendők.
-- A böngészős hardverteszt (kamera, hang, érintés) az eladói varázslóban még nincs benne.
+- A böngészős hardverteszt (érintés, mozgás, hang, kamera, kijelző) benne van a varázslóban, valódi eszközön az érintés, kamera és mikrofon még ellenőrizendő. A gombok és a fejhallgató-aljzat tesztje még nincs meg.
+- A varázsló először mindent a böngészőben csinál meg, és a végén, ha marad ellenőrizetlen adat, felajánlja az USB-s programot (igen/nem). Az iPad böngészőjéből a számítógépre az eredmények még nem költöznek át, ehhez a backendnek egy `resume` művelet kell.
 - A varázsló a Safari 9.1-et (iOS 9.3.5) és az újabbakat célozza, ezért csak ES5-öt használ, `fetch` és `TextEncoder` nélkül. Az iOS 9.3.5 menünevei valódi iPaden ellenőrizve vannak, a többi rendszeré az Apple magyar oldalairól és útmutatókból származik, valódi eszközön még ellenőrizendők.
 
 ## Fejlesztés
