@@ -444,7 +444,29 @@
       return;
     }
     DEMO = false; CODE = text;
-    go('kind');
+    if (!window.BACKEND_URL) { go('kind'); return; }
+    // Ha az eszközön már elkezdték, és a számítógépre váltottak, a mentett eredmények itt jönnek vissza.
+    var button = $('start');
+    if (button) button.disabled = true;
+    message('msg', '<p class="muted">A kód ellenőrzése...</p>');
+    post({ action: 'resume', code: text }).then(function (r) {
+      if (r && r.ok && r.found) {
+        if (!applyHandoff(r.data)) { throw serverError('A mentett folyamatot nem sikerült betölteni. Új meghívókódra van szükséged.'); }
+        state.sid = r.sid;
+        go('resumed');
+        return;
+      }
+      if (r && !r.ok && r.code === 'bad_code') throw serverError(r.error);
+      go('kind');
+    }).catch(function (error) {
+      if (error && error.fromServer) {
+        if ($('start')) $('start').disabled = false;
+        message('msg', '<div class="error">' + esc(error.message) + '</div>');
+        return;
+      }
+      // Hálózati hiba: a kód a küldéskor úgyis ellenőrzésre kerül, ezért itt nem akadunk meg.
+      go('kind');
+    });
   }
 
   SCREENS.welcome = function () {
@@ -478,7 +500,7 @@
       '<ul class="plain">' +
         '<li><b>Te döntesz.</b> Minden adatot előbb te látsz, és csak akkor megy el bármi, ha a végén te nyomod meg a Küldés gombot.</li>' +
         '<li><b>Nem módosítunk semmit.</b> Az oldal nem telepít programot, és nem változtat az eszközödön.</li>' +
-        '<li><b>Egyetlen címzett.</b> Az adatok egy emailben mennek el a vásárlónak. Az oldal nem tárol belőlük másolatot.</li>' +
+        '<li><b>Egyetlen címzett.</b> Az adatok egy emailben mennek el a vásárlónak. Az oldal nem tárol belőlük tartós másolatot. Ha az eszközről számítógépre váltasz, az eddigi eredményeidet legfeljebb 6 órára elmentjük, a sorozatszám nélkül.</li>' +
         '<li><b>Nyílt forráskód.</b> Az oldal teljes kódja nyilvános, bárki ellenőrizheti, mit csinál: <a href="https://gitlab.com/krisz0722/ipad-audit/-/tree/main/web" target="_blank" rel="noopener">forráskód megtekintése</a>.</li>' +
         '<li><b>Bármikor kiléphetsz.</b> Ha meggondolod magad, zárd be az oldalt. Addig nem történik semmi.</li>' +
       '</ul>' +
@@ -582,19 +604,118 @@
     on('u-next', function () { go('usb_paste'); });
   };
 
-  SCREENS.usb_switch = function () {
-    show(top() + progress(2) +
-      '<h1>Nyisd meg az oldalt a számítógépeden</h1>' +
-      '<p class="lead">Az USB-s kiolvasáshoz a számítógépen kell dolgoznod, ahová az eszközt rákötöd. Nyisd meg ott ezt a címet (küldd el magadnak például emailben):</p>' +
+  /* ---- átadás az iPadról a számítógépnek ---- */
+
+  // A sorozatszámot nem töltjük fel: a számítógépen az USB-s program úgyis kiolvassa.
+  function buildHandoff() {
+    var vals = {}, parsed = {}, key;
+    for (key in state.vals) { if (Object.prototype.hasOwnProperty.call(state.vals, key)) vals[key] = key === 'serial' ? '' : state.vals[key]; }
+    for (key in state.parsed) { if (Object.prototype.hasOwnProperty.call(state.parsed, key) && key !== 'serial') parsed[key] = state.parsed[key]; }
+    return {
+      v: 1, kind: state.kind, osFamily: state.osFamily, detectedOs: state.detectedOs,
+      vals: vals, parsed: parsed, extra: state.extra, hw: state.hw, hwSkipped: state.hwSkipped,
+      apple: state.apple, shareSerial: state.shareSerial, noLog: state.noLog, route: state.route
+    };
+  }
+
+  // A szerverről érkező adatot nem hisszük el vakon: csak ismert mezők, ismert típusokkal kerülnek az állapotba.
+  function applyHandoff(h) {
+    if (!h || typeof h !== 'object' || h.v !== 1 || h.kind !== 'ios') return false;
+    var key, i, list;
+    state.kind = 'ios';
+    state.osFamily = OS_ORDER.indexOf(h.osFamily) >= 0 ? h.osFamily : '';
+    state.detectedOs = clean(h.detectedOs, 20);
+    if (h.vals && typeof h.vals === 'object') {
+      for (key in state.vals) {
+        if (key !== 'serial' && typeof h.vals[key] === 'string') state.vals[key] = clean(h.vals[key], 60);
+      }
+    }
+    state.parsed = {};
+    if (h.parsed && typeof h.parsed === 'object') {
+      for (key in h.parsed) {
+        if (key !== 'serial' && Object.prototype.hasOwnProperty.call(state.vals, key) && typeof h.parsed[key] === 'string') state.parsed[key] = clean(h.parsed[key], 60);
+      }
+    }
+    if (h.extra && typeof h.extra === 'object') {
+      list = ['condition', 'fileDate', 'activationLock', 'modelId'];
+      for (i = 0; i < list.length; i++) { if (typeof h.extra[list[i]] === 'string') state.extra[list[i]] = clean(h.extra[list[i]], 40); }
+      state.extra.dep = typeof h.extra.dep === 'boolean' ? h.extra.dep : null;
+      state.extra.mdm = typeof h.extra.mdm === 'boolean' ? h.extra.mdm : null;
+    }
+    state.hw = {};
+    list = HW_FLOW.ios;
+    for (i = 0; i < list.length; i++) {
+      var r = h.hw && h.hw[list[i]];
+      if (r && typeof r === 'object' && ['ok', 'bad', 'skipped', 'unavailable'].indexOf(r.status) >= 0) {
+        state.hw[list[i]] = { status: r.status, detail: clean(r.detail, 200) };
+      }
+    }
+    state.hwSkipped = h.hwSkipped === true;
+    state.apple = ['yes', 'no', 'unsure'].indexOf(h.apple) >= 0 ? h.apple : '';
+    state.shareSerial = h.shareSerial !== false;
+    state.noLog = h.noLog === true;
+    state.route = ['file', 'command', 'usb'].indexOf(h.route) >= 0 ? h.route : '';
+    return true;
+  }
+
+  function ensureSession() {
+    if (state.sid) return Promise.resolve(state.sid);
+    return post({ action: 'start', code: CODE }).then(function (r) {
+      if (!r || !r.ok) throw serverError((r && r.error ? r.error : 'A link nem érvényes.') + ' Új meghívókódra van szükséged.');
+      state.sid = r.sid;
+      save();
+      return r.sid;
+    });
+  }
+
+  function addressBox() {
+    return '<p>Nyisd meg ezt a címet a számítógépeden (küldd el magadnak például emailben):</p>' +
       '<pre class="code" id="addr">' + esc(pageAddress()) + '</pre>' +
       '<button type="button" class="btn small" id="copy-addr">Cím másolása</button><span class="muted" id="copied-addr"></span>' +
-      '<div class="note">A meghívókód a címben benne van, ott nem kell újra beírnod. A számítógépen az elejétől kezdd, és válaszd az USB-s utat. Itt az eszközön nem kell mást tenned.</div>' +
-      foot());
-    on('copy-addr', function () {
-      copyText(pageAddress(), function (ok) {
-        message('copied-addr', ok ? ' Kimásolva.' : ' Nem sikerült. Jelöld ki a címet, és másold ki kézzel.');
+      '<div class="note">A meghívókód a címben benne van. A számítógépen koppints a <b>Rendben, kezdjük</b> gombra, és az eddigi eredményeid ott várnak, onnan folytatod. Itt az eszközön nem kell mást tenned.</div>';
+  }
+
+  function uploadHandoff() {
+    function ready(note) {
+      message('handoff', '<div class="success">' + note + '</div>' + addressBox());
+      on('copy-addr', function () {
+        copyText(pageAddress(), function (ok) {
+          message('copied-addr', ok ? ' Kimásolva.' : ' Nem sikerült. Jelöld ki a címet, és másold ki kézzel.');
+        });
       });
+    }
+    if (DEMO) { ready('Próbaüzem: semmit nem mentünk el.'); return; }
+    if (!window.BACKEND_URL) { message('handoff', '<div class="error">Az oldal nincs beállítva, a mentés most nem lehetséges.</div>'); return; }
+    message('handoff', '<p class="muted">Az eddigi eredményeid mentése...</p>');
+    ensureSession().then(function (sid) {
+      return post({ action: 'handoff', sid: sid, data: buildHandoff() });
+    }).then(function (r) {
+      if (!r || !r.ok) throw serverError(r && r.error ? r.error : 'A mentés nem sikerült.');
+      ready('Az eddigi eredményeidet elmentettük (a sorozatszám nélkül, legfeljebb 6 órára).');
+    }).catch(function (error) {
+      message('handoff', '<div class="error">' + esc(error && error.fromServer ? error.message : 'Nincs kapcsolat a szerverrel. Ellenőrizd az internetet, és próbáld újra.') + '</div>' +
+        '<button type="button" class="btn small" id="retry-handoff">Újra</button>');
+      on('retry-handoff', uploadHandoff);
     });
+  }
+
+  SCREENS.usb_switch = function () {
+    show(top() + progress(4) +
+      '<h1>Folytasd a számítógépeden</h1>' +
+      '<p class="lead">Az USB-s kiolvasáshoz a számítógépen kell dolgoznod, ahová az eszközt rákötöd. Amit eddig megcsináltál, azt nem kell újra elvégezned.</p>' +
+      '<div id="handoff"></div>' + foot());
+    uploadHandoff();
+  };
+
+  SCREENS.resumed = function () {
+    var done = 0, name;
+    for (name in state.hw) { if (Object.prototype.hasOwnProperty.call(state.hw, name)) done++; }
+    show(top() + progress(4) +
+      '<h1>Folytatjuk onnan, ahol abbahagytad</h1>' +
+      '<p class="lead">Az eszközön megcsinált lépéseid betöltöttük: az eszköz adatait' + (done ? ' és ' + done + ' hardverteszt eredményét' : '') + '. Most az USB-s kiolvasás jön, ez adja a pontos akkumulátor adatot.</p>' +
+      (ON_COMPUTER ? '' : '<div class="note">Az USB-s lépést a számítógépen kell elvégezned. Ha itt folytatod, a következő képernyő megmutatja a címet.</div>') +
+      foot('rs-next', 'Tovább'));
+    on('rs-next', toUsb);
   };
 
   SCREENS.usb_paste = function () {
@@ -1230,11 +1351,7 @@
     state.sending = true;
     $('send').disabled = true;
     message('msg', '<p class="muted">Küldés...</p>');
-    var started = state.sid ? Promise.resolve(state.sid) : post({ action: 'start', code: CODE }).then(function (r) {
-      if (!r || !r.ok) throw serverError((r && r.error ? r.error : 'A link nem érvényes.') + ' Új meghívókódra van szükséged.');
-      state.sid = r.sid;
-      return r.sid;
-    });
+    var started = ensureSession();
     started.then(function (sid) {
       return post({ action: 'finish', sid: sid, serial: serialField, sections: sections });
     }).then(function (r) {
