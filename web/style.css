@@ -102,5 +102,7 @@ a.btn { text-decoration: none; }
 #color { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
 #colorbar { position: absolute; left: 0; right: 0; bottom: 18px; text-align: center; }
 
-details.example { margin: 18px 0; }
+details.example { margin: 22px 0; padding: 14px 18px; background: var(--soft); border: 2px solid var(--accent); border-radius: 14px; }
+details.example[open] summary { margin-bottom: 8px; }
+details.example .tablewrap { background: var(--card); border-radius: 10px; }
 details.example summary { font-size: 18px; }
