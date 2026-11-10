@@ -44,16 +44,12 @@ The page never asks the seller to switch anything on and sends nothing to Apple.
 
 Data path in seller mode: browser, Google Apps Script, email to the buyer.
 
-### Switching from the iPad to a computer
-
-If, after the browser steps on the iPad, the seller chooses the USB program, the page uploads the results so far (device details, hardware test results, the sign-out answer) to the backend session with the `handoff` action, **without the serial number**. On the computer, typing the invite code makes the `resume` action return them, and after the USB measurement one report is sent. The handed-over data lives only in the Google Apps Script cache for at most 6 hours, never reaches the sheet, and the session ends once the report is sent. Both actions are in [backend/Code.gs](backend/Code.gs), tested by [tests/backend.test.js](tests/backend.test.js).
-
 ## Status
 
 - The iPad file reader in the wizard relies on assumed field names (`Last_Value_CycleCount`, `MaximumCapacityPercent`) and still needs to be checked against a real file.
 - The `system_profiler` key names used by the Mac command still need to be checked on a real Mac.
 - The in-browser hardware test (touch, motion, audio, camera, display) is part of the wizard. Touch, camera and microphone still need checking on a real device. A test for the buttons and the headphone jack does not exist yet.
-- The wizard does everything it can in the browser first and, if unverified data is left at the end, offers the USB program (yes or no). If the seller switches from the iPad to a computer, the results so far carry over and one report is produced (see below).
+- The wizard does everything it can in the browser first and, if unverified data is left at the end, offers the USB program (yes or no). If the seller picks the USB program, they start the page again on the computer with the same code. The browser test results from the iPad do not carry over, because nothing is stored; the report is sent from the computer with the data read over USB.
 - The wizard targets Safari 9.1 (iOS 9.3.5) and newer, so it uses ES5 only, without `fetch` or `TextEncoder`. The iOS 9.3.5 menu names were checked on a real iPad, the names for other versions come from Apple's Hungarian pages and guides and still need checking on real devices.
 
 ## Development
@@ -82,8 +78,6 @@ Dependencies of the Python part: [requirements.txt](requirements.txt). Tests: [t
 4. [.gitlab-ci.yml](.gitlab-ci.yml) publishes the `web/` folder to GitLab Pages.
 
 The `/exec` address is not a secret. Protection comes from the invite code and the daily mail limit.
-
-After changing `Code.gs`, the change only goes live with a new deployment: Deploy > Manage deployments > pencil icon > Version: New version > Deploy. The `/exec` address stays the same.
 
 ## Reporting a security problem
 

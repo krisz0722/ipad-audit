@@ -11,7 +11,6 @@ var SESSION_SECONDS = 21600; // A CacheService felső korlátja.
 var COLS = { code: 1, label: 2, expires: 3, status: 4, used: 5 };
 var CODE_DIGITS = 9;
 var MAX_FAILS_PER_HOUR = 30;
-var MAX_HANDOFF = 20000;
 
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('iPad audit').addItem('Új meghívó', 'newInvite').addToUi();
@@ -132,54 +131,6 @@ function step_(body) {
   return json_({ ok: true });
 }
 
-function normalizeCode_(value) {
-  return String(value || '').trim().toUpperCase().replace(/[\s-]/g, '');
-}
-
-// Az eszközön (iPad) elkészült eredmények átadása a számítógépnek. A sorozatszámot a kliens nem tölti fel.
-// Az adat csak a session-ben él, legfeljebb SESSION_SECONDS ideig.
-function handoff_(body) {
-  var session = loadSession_(body.sid);
-  if (!session || session.mailed) return fail_('A session nem érvényes.');
-  var data = body.data;
-  if (!data || typeof data !== 'object' || Array.isArray(data)) return fail_('Hibás adat.');
-  var text = JSON.stringify(data);
-  if (text.length > MAX_HANDOFF) return fail_('Túl nagy adat.');
-  var code = normalizeCode_(sheet_().getRange(session.row, COLS.code).getValue());
-  session.handoff = text;
-  saveSession_(body.sid, session);
-  CacheService.getScriptCache().put('h:' + code, body.sid, SESSION_SECONDS);
-  return json_({ ok: true });
-}
-
-// A számítógép a meghívókóddal kéri vissza az átadott eredményeket. Új meghívónál nincs mit visszaadni,
-// ez nem használja el a meghívót. A kódhibákra code: 'bad_code' jelzés jön, a kliens csak ezeknél áll meg.
-function resume_(body) {
-  var code = normalizeCode_(body.code);
-  var cache = CacheService.getScriptCache();
-  var failKey = 'fails:' + Utilities.formatDate(new Date(), 'Etc/UTC', 'yyyy-MM-dd-HH');
-  var fails = Number(cache.get(failKey) || 0);
-  function bad(message) {
-    cache.put(failKey, String(fails + 1), 3600);
-    return json_({ ok: false, error: message, code: 'bad_code' });
-  }
-  if (fails >= MAX_FAILS_PER_HOUR) return json_({ ok: false, error: 'Túl sok hibás próbálkozás, próbáld újra egy óra múlva.', code: 'bad_code' });
-  var invite = findInvite_(sheet_(), code);
-  if (!invite) return bad('A meghívókód nem érvényes.');
-  var status = invite.values[COLS.status - 1];
-  if (status === 'új') {
-    if (new Date(invite.values[COLS.expires - 1]).getTime() < Date.now()) return bad('A meghívókód lejárt.');
-    return json_({ ok: true, found: false });
-  }
-  if (status !== 'folyamatban') return bad('Ezt a meghívókódot már felhasználták.');
-  var sid = cache.get('h:' + code);
-  var session = sid ? loadSession_(sid) : null;
-  if (!session || session.mailed || !session.handoff) {
-    return bad('Ehhez a kódhoz nincs mentett folyamat (lejárt, vagy már elküldték). Új meghívókódra van szükséged.');
-  }
-  return json_({ ok: true, found: true, sid: sid, data: JSON.parse(session.handoff) });
-}
-
 function esc_(value) {
   return String(value).replace(/[&<>"']/g, function (c) {
     return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
@@ -247,8 +198,6 @@ function doPost(e) {
     if (body.action === 'start') return start_(body);
     if (body.action === 'step') return step_(body);
     if (body.action === 'finish') return finish_(body);
-    if (body.action === 'handoff') return handoff_(body);
-    if (body.action === 'resume') return resume_(body);
     return fail_('Ismeretlen művelet.');
   } finally {
     lock.releaseLock();

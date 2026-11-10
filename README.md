@@ -44,16 +44,12 @@ Az oldal az eladót semmire nem kéri, hogy bekapcsoljon az eszközén, és semm
 
 Adatút az eladói módban: böngésző, Google Apps Script, email a vásárlónak.
 
-### Váltás az iPadről a számítógépre
-
-Ha az eladó az iPaden a böngészős lépések után az USB-s programot választja, az oldal a `handoff` művelettel feltölti az eddigi eredményeit (eszköz adatai, hardverteszt eredmények, a kijelentkezési válasz) a backend sessionjébe, **a sorozatszám nélkül**. A számítógépen a meghívókód beírásakor a `resume` művelet visszaadja ezeket, és az USB-s mérés után egyetlen riport megy el. Az átadott adat csak a Google Apps Script cache-ében él, legfeljebb 6 órát, a Táblába nem kerül, és a riport elküldése után a session lezárul. Mindkét művelet a [backend/Code.gs](backend/Code.gs)-ben van, a tesztje a [tests/backend.test.js](tests/backend.test.js).
-
 ## Állapot
 
 - A varázsló iPad-fájl kiolvasója feltételezett mezőnevekre épül (`Last_Value_CycleCount`, `MaximumCapacityPercent`), valódi fájllal még ellenőrizendő.
 - A Mac-parancs `system_profiler` kulcsnevei valódi Macen még ellenőrizendők.
 - A böngészős hardverteszt (érintés, mozgás, hang, kamera, kijelző) benne van a varázslóban, valódi eszközön az érintés, kamera és mikrofon még ellenőrizendő. A gombok és a fejhallgató-aljzat tesztje még nincs meg.
-- A varázsló először mindent a böngészőben csinál meg, és a végén, ha marad ellenőrizetlen adat, felajánlja az USB-s programot (igen/nem). Ha az eladó az iPadről számítógépre vált, az eddigi eredményei átmennek, és egyetlen riport készül (lásd lent).
+- A varázsló először mindent a böngészőben csinál meg, és a végén, ha marad ellenőrizetlen adat, felajánlja az USB-s programot (igen/nem). Ha az eladó az USB-s programot választja, a számítógépen újrakezdi az oldalt ugyanazzal a kóddal. Az iPad böngészős teszteredményei nem mennek át, mert a rendszer semmit nem tárol el, a riport a számítógépről megy el az USB-ből kiolvasott adatokkal.
 - A varázsló a Safari 9.1-et (iOS 9.3.5) és az újabbakat célozza, ezért csak ES5-öt használ, `fetch` és `TextEncoder` nélkül. Az iOS 9.3.5 menünevei valódi iPaden ellenőrizve vannak, a többi rendszeré az Apple magyar oldalairól és útmutatókból származik, valódi eszközön még ellenőrizendők.
 
 ## Fejlesztés
@@ -82,8 +78,6 @@ A Python rész függőségei: [requirements.txt](requirements.txt). A tesztek: [
 4. A [.gitlab-ci.yml](.gitlab-ci.yml) a `web/` mappát GitLab Pagesre publikálja.
 
 A `/exec` cím nem titok, a védelmet a meghívókód és a napi levélkorlát adja.
-
-A `Code.gs` módosítása után a változás csak új telepítéssel él: Telepítés > Telepítések kezelése > ceruza ikon > Verzió: Új verzió > Telepítés. A `/exec` cím ilyenkor nem változik.
 
 ## Biztonsági bejelentés
 
