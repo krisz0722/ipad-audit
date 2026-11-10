@@ -53,6 +53,26 @@ def test_unknown_lock_state():
     assert "activation_lock: unknown" in block
 
 
+def test_summary_is_readable_and_has_no_identifiers():
+    text = "\n".join(reader.summary_lines(RAW))
+    assert "iPad mini 1" in text and "9.3.5" in text and "16 GB" in text
+    assert "244 töltési ciklus" in text and "84.7%" in text
+    assert "Aktiválási zár: kikapcsolva" in text
+    for secret in ("DMPS00000FAK", "a1b2c3d4", "Valaki iPadje", "490154203237518", "55:73", "2830"):
+        assert secret not in text
+
+
+def test_summary_warns_on_worn_battery():
+    worn = dict(RAW, bat={"CycleCount": 900, "DesignCapacity": 4490, "AppleRawMaxCapacity": 3000})
+    assert "Figyelem" in "\n".join(reader.summary_lines(worn))
+    assert "Figyelem" not in "\n".join(reader.summary_lines(RAW))
+
+
+def test_summary_without_battery_and_lock_state():
+    text = "\n".join(reader.summary_lines({"info": {"ProductType": "iPad2,5"}}))
+    assert "nem sikerült kiolvasni" in text and "nem olvasható ki" in text
+
+
 def test_reader_has_no_network_code():
     path = os.path.join(os.path.dirname(__file__), "..", "tool", "ipad_audit", "reader.py")
     with open(path, encoding="utf-8") as handle:

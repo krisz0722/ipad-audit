@@ -37,8 +37,8 @@ def _lock(info):
     return {"YES": "on", "NO": "off"}.get(state, "unknown")
 
 
-def build_block(raw):
-    """A nyers eszközadatból előállítja a kiírandó blokkot. Más mező nem kerülhet bele."""
+def facts(raw):
+    """A nyers eszközadatból kiszámolja a kiírható tényeket. Csak ezek kerülhetnek bármilyen kimenetbe."""
     info = raw.get("info") or {}
     bat = raw.get("bat") or {}
     disk = raw.get("disk") or {}
@@ -50,20 +50,58 @@ def build_block(raw):
     product = _text(info.get("ProductType"), 20)
     serial = re.sub(r"[^A-Za-z0-9]", "", str(info.get("SerialNumber") or ""))[:14] or None
 
+    return {
+        "model": product,
+        "model_name": MODELS.get(product),
+        "os": _text(info.get("ProductVersion"), 20),
+        "serial": serial,
+        "storage_gb": round(total / 1e9) if total else None,
+        "cycles": _int(bat.get("CycleCount")),
+        "design_capacity": design,
+        "max_capacity": max_capacity,
+        "capacity_percent": percent,
+        "activation_lock": _lock(info),
+    }
+
+
+def build_block(raw):
+    """A nyers eszközadatból előállítja a kiírandó blokkot. Más mező nem kerülhet bele."""
+    f = facts(raw)
     fields = [
-        ("model", product),
-        ("model_name", MODELS.get(product)),
-        ("os", _text(info.get("ProductVersion"), 20)),
-        ("serial", serial),
-        ("storage_gb", round(total / 1e9) if total else None),
-        ("cycles", _int(bat.get("CycleCount"))),
-        ("design_capacity", design),
-        ("max_capacity", max_capacity),
-        ("capacity_percent", percent),
-        ("activation_lock", _lock(info)),
+        ("model", f["model"]),
+        ("model_name", f["model_name"]),
+        ("os", f["os"]),
+        ("serial", f["serial"]),
+        ("storage_gb", f["storage_gb"]),
+        ("cycles", f["cycles"]),
+        ("design_capacity", f["design_capacity"]),
+        ("max_capacity", f["max_capacity"]),
+        ("capacity_percent", f["capacity_percent"]),
+        ("activation_lock", f["activation_lock"]),
     ]
     lines = [HEADER] + ["%s: %s" % (key, value) for key, value in fields if value not in (None, "")] + [FOOTER]
     return "\n".join(lines)
+
+
+def summary_lines(raw):
+    """Érthető összegzés az eladónak: mit talált a program. Sorozatszámot és azonosítót nem ír ki."""
+    f = facts(raw)
+    lines = []
+    name = f["model_name"] or f["model"]
+    device = ", ".join(part for part in (name, ("rendszer: " + f["os"]) if f["os"] else None,
+                                         ("%s GB tárhely" % f["storage_gb"]) if f["storage_gb"] else None) if part)
+    if device:
+        lines.append("Az eszközöd: " + device)
+    if f["cycles"] is not None:
+        wear = ("az eredeti kapacitás %s%%-a maradt" % f["capacity_percent"]) if f["capacity_percent"] is not None else "a kapacitás nem olvasható ki"
+        lines.append("Akkumulátor: %s töltési ciklus, %s" % (f["cycles"], wear))
+        if f["capacity_percent"] is not None and f["capacity_percent"] < 80:
+            lines.append("  Figyelem: 80% alatti kapacitásnál az akku már érezhetően gyengébb, a vevő ezt látni fogja.")
+    else:
+        lines.append("Akkumulátor: ezen az eszközön nem sikerült kiolvasni.")
+    lock = {"on": "BEKAPCSOLVA (ki kell jelentkezni az Apple-fiókból)", "off": "kikapcsolva"}.get(f["activation_lock"], "ezen a rendszeren nem olvasható ki")
+    lines.append("Aktiválási zár: " + lock)
+    return lines
 
 
 async def read_raw(notify):
@@ -134,6 +172,9 @@ def main():
         sys.exit(1)
     block = build_block(raw)
     print(block)
+    print("\nEzt találtuk az eszközödön:", file=sys.stderr)
+    for line in summary_lines(raw):
+        print("  " + line, file=sys.stderr)
     if copy_to_clipboard(block):
         print("\nA fenti szöveg a vágólapra került. Illeszd be a weboldalon.", file=sys.stderr)
     else:
