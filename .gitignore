@@ -13,3 +13,6 @@ node_modules/
 *.pem
 *.key
 *.bundle
+flows-out/
+playwright-report/
+test-results/
