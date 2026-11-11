@@ -23,7 +23,7 @@ Az eladó minden adatot előbb lát egy előnézetben, és csak a **Küldés** g
 ### Hogyan ellenőrizheted?
 
 - [web/parse.js](web/parse.js): a kiolvasók. Csak előre felsorolt mezőket olvasnak, minden más adat figyelmen kívül marad. Itt készül a sorozatszám lenyomata és a riport szerkezete is.
-- [web/seller.js](web/seller.js): a varázsló. Hálózati kérés kizárólag a `send()` függvényben van, a Küldés gomb után.
+- [web/seller.js](web/seller.js): a varázsló. Hálózati kérés kizárólag a `send()` függvényben van, a Küldés gomb után. A fájl az [src/web/seller/](src/web/seller/) mappa részeiből épül (egy egyszerű összefűzés, a működésen nem változtat), a kettő együtt van a repóban, és egy teszt őrzi, hogy mindig egyezzenek.
 - [web/index.html](web/index.html): az oldal harmadik fél scriptjét nem tölti be, csak a saját fájljait.
 - [backend/Code.gs](backend/Code.gs): a fogadó Google Apps Script. Meghívó nélkül semmit nem fogad el, a Táblában csak kódot, címkét, lejáratot és állapotot tárol, az eredményt emailben küldi.
 
@@ -53,6 +53,12 @@ Adatút az eladói módban: böngésző, Google Apps Script, email a vásárlón
 - A varázsló a Safari 9.1-et (iOS 9.3.5) és az újabbakat célozza, ezért csak ES5-öt használ, `fetch` és `TextEncoder` nélkül. Az iOS 9.3.5 menünevei valódi iPaden ellenőrizve vannak, a többi rendszeré az Apple magyar oldalairól és útmutatókból származik, valódi eszközön még ellenőrizendők.
 
 ## Fejlesztés
+
+A varázsló kódját az [src/web/seller/](src/web/seller/) részfájljaiban szerkeszd, utána futtasd az összefűzést (a web/seller.js ebből készül, a teszt hibát jelez, ha elfelejted):
+
+```
+npm run build:web
+```
 
 Az összes egységteszt (kiolvasók, backend, dokumentáció, és egy védőháló, ami az iOS 9-es Safari miatt tiltja a modern szintaxist a web/ mappában) egy paranccsal fut:
 

@@ -1,3 +1,6 @@
+// FIGYELEM: ezt a fájlt a scripts/build-web.js állítja elő az src/web/seller/ mappa részeiből.
+// Ne ezt szerkeszd: módosítsd a részeket, és futtasd az npm run build:web parancsot. Egy teszt őrzi, hogy a kettő egyezzen.
+// ===== src/web/seller/00-head.js =====
 // Az eladói varázsló. Független az átvételi oldal USB-s folyamatától (receiver/app.js).
 // Minden adat a böngészőben marad, amíg az eladó a végén meg nem nyomja a Küldés gombot.
 // Felépítés: minden képernyő egy lépés (SCREENS). A megtett út (state.path, state.idx) a sessionStorage-ban és a
@@ -62,6 +65,7 @@
 
   var SCREENS = {};
 
+// ===== src/web/seller/10-helpers.js =====
   /* ---------- segédek ---------- */
 
   function esc(text) {
@@ -150,6 +154,7 @@
     } else { fallback(); }
   }
 
+// ===== src/web/seller/20-navigation.js =====
   /* ---------- lépéskezelés ---------- */
 
   function render() {
@@ -192,6 +197,7 @@
     render();
   }
 
+// ===== src/web/seller/30-os-steps.js =====
   /* ---------- rendszerverzió szerinti lépések ---------- */
 
   // Az iOS 9 menünevei egy valódi, magyar nyelvű iPad mini fényképeiről vannak leolvasva. A többi rendszeré az Apple magyar
@@ -262,6 +268,7 @@
     });
   }
 
+// ===== src/web/seller/40-persistence-and-collect.js =====
   /* ---------- állapotmentés: egy régi iPad a Beállításokból visszatérve gyakran újratölti a lapot ---------- */
 
   var STORE_KEY = 'ipad-audit-seller-v2';
@@ -316,6 +323,7 @@
     };
   }
 
+// ===== src/web/seller/50-results.js =====
   /* ---------- eredmények: ugyanaz a Tovább és javítás gomb minden beolvasás után ---------- */
 
   function resultActions() {
@@ -422,6 +430,7 @@
     bindResult('mac_manual');
   }
 
+// ===== src/web/seller/60-welcome-and-kind.js =====
   /* ---------- képernyők ---------- */
 
   // A riport szakaszainak táblázata. Az előnézet és a nyitóoldali példa is ezt használja, ezért a kettő nem térhet el.
@@ -522,6 +531,7 @@
     on('k-mac', function () { pickKind('mac'); });
   };
 
+// ===== src/web/seller/70-usb.js =====
   /* ---- akku, iPad és iPhone: USB ---- */
 
   function macDownloadCommand() {
@@ -619,6 +629,7 @@
     });
   };
 
+// ===== src/web/seller/72-ios-battery.js =====
   /* ---- akku, iPad és iPhone: Beállítások ---- */
 
   SCREENS.screen_ask = function () {
@@ -724,6 +735,7 @@
     on('n-skip', function () { clearBattery(); state.noLog = true; go('details'); });
   };
 
+// ===== src/web/seller/74-mac.js =====
   /* ---- akku, Mac ---- */
 
   SCREENS.mac_run = function () {
@@ -791,6 +803,7 @@
     on('to-command', function () { go('mac_run'); });
   };
 
+// ===== src/web/seller/80-hw-core.js =====
   /* ---- hardverteszt: az oldal maga méri, mit érzékel az eszköz ---- */
 
   var HW_FLOW = { ios: ['touch', 'motion', 'audio', 'camera_rear', 'camera_front', 'display'], mac: ['keyboard', 'pointer', 'audio', 'camera_front', 'display'] };
@@ -843,6 +856,7 @@
     on('hw-no', function () { state.hwSkipped = true; go(afterHw()); });
   };
 
+// ===== src/web/seller/81-hw-touch-keyboard-pointer.js =====
   /* érintőképernyő */
   SCREENS.hw_touch = function () {
     if (hwScreen('touch', 'Húzd végig az ujjad a kijelzőn úgy, hogy minden mezőt érintsél, a végén pedig tegyél egyszerre két ujjat a kijelzőre. Az oldal számolja, hány mezőt érzékelt az eszköz.', '', true, '')) {
@@ -1053,6 +1067,7 @@
     refresh();
   }
 
+// ===== src/web/seller/82-hw-motion-audio.js =====
   /* mozgásérzékelők */
   SCREENS.hw_motion = function () {
     if (hwScreen('motion', 'Koppints az Indításra, majd dönts meg és fordíts el az eszközt minden irányba kb. fél percig.', '', true, '')) {
@@ -1185,6 +1200,7 @@
     });
   }
 
+// ===== src/web/seller/83-hw-camera-display.js =====
   /* kamerák */
   function cameraSupported() { return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia); }
 
@@ -1264,6 +1280,7 @@
     });
   }
 
+// ===== src/web/seller/90-details-remaining-review-send.js =====
   /* ---- az eszköz adatai, előnézet, küldés ---- */
 
   SCREENS.details = function () {
@@ -1433,6 +1450,7 @@
     show(html);
   };
 
+// ===== src/web/seller/95-demo.js =====
   /* ---------- próbaüzem: ugrás bármelyik képernyőre és állapotra (csak #DEMO címen él) ---------- */
 
   var DEMO_ENVS = {
@@ -1614,6 +1632,7 @@
   demo(GMAC, 'mac-review-nohw', 'Előnézet: hardverteszt kihagyva', { env: 'macpc', kind: 'mac', vals: 'mac', route: 'command', hw: 'none', hwSkipped: true, screen: 'review' });
   demo(GMAC, 'mac-done', 'Köszönjük (a küldés után)', { env: 'macpc', kind: 'mac', vals: 'mac', route: 'command', hw: 'ok', screen: 'done' });
 
+// ===== src/web/seller/99-start.js =====
   /* ---------- indítás ---------- */
 
   var detected = DEVICE;

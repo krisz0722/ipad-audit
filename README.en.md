@@ -23,7 +23,7 @@ The seller sees everything in a preview first, and nothing leaves the device unt
 ### How can you check this?
 
 - [web/parse.js](web/parse.js): the readers. They only read a fixed list of fields and ignore everything else. The serial number fingerprint and the report structure are built here too.
-- [web/seller.js](web/seller.js): the wizard. The only network request is in the `send()` function, after the Send button.
+- [web/seller.js](web/seller.js): the wizard. The only network request is in the `send()` function, after the Send button. The file is built from the parts in [src/web/seller/](src/web/seller/) (a plain concatenation that does not change how it works), both are in the repository, and a test guards that they always match.
 - [web/index.html](web/index.html): the page loads no third-party scripts, only its own files.
 - [backend/Code.gs](backend/Code.gs): the receiving Google Apps Script. It accepts nothing without an invitation, stores only the code, label, expiry and status in the sheet, and delivers the result by email.
 
@@ -53,6 +53,12 @@ Data path in seller mode: browser, Google Apps Script, email to the buyer.
 - The wizard targets Safari 9.1 (iOS 9.3.5) and newer, so it uses ES5 only, without `fetch` or `TextEncoder`. The iOS 9.3.5 menu names were checked on a real iPad, the names for other versions come from Apple's Hungarian pages and guides and still need checking on real devices.
 
 ## Development
+
+Edit the wizard code in the part files of [src/web/seller/](src/web/seller/), then run the concatenation (web/seller.js is built from them, and a test fails if you forget):
+
+```
+npm run build:web
+```
 
 All unit tests (the readers, the backend, the documentation, and a guard that forbids modern syntax in the web/ folder because of the iOS 9 Safari) run with one command:
 

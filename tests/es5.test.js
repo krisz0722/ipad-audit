@@ -106,3 +106,11 @@ test('a szkenner nem nyeli el a valódi kódot: a kiszűrt seller.js-ben még ot
   assert.ok((code.match(/\bSCREENS\./g) || []).length > 25, 'a képernyők megvannak');
   assert.ok(code.length > source.length * 0.35, 'a kód nagy része megmaradt');
 });
+
+// A részfájlokat (src/web/seller/) is ellenőrizzük, mert azokat szerkesztjük, nem a generált fájlt.
+const PARTS_DIR = path.join(__dirname, '..', 'src', 'web', 'seller');
+for (const name of fs.readdirSync(PARTS_DIR).filter((n) => /\.js$/.test(n)).sort()) {
+  test('src/web/seller/' + name + ': nincs benne modern szintaxis (iOS 9 Safari)', () => {
+    assert.deepStrictEqual(findModern(fs.readFileSync(path.join(PARTS_DIR, name), 'utf8')), []);
+  });
+}

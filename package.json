@@ -3,12 +3,13 @@
   "private": true,
   "description": "Remote condition check for used iPads, iPhones and Macs",
   "scripts": {
-    "test": "node --test tests/seller_parse.test.js tests/example.test.js tests/docs.test.js tests/backend.test.js tests/es5.test.js",
-    "e2e": "playwright test",
+    "test": "node --test tests/seller_parse.test.js tests/example.test.js tests/docs.test.js tests/backend.test.js tests/es5.test.js tests/build.test.js",
+    "e2e": "node scripts/build-web.js && playwright test",
     "gallery": "node scripts/build-flows-gallery.js",
-    "flows": "playwright test; node scripts/build-flows-gallery.js",
-    "watch": "PAUSE_MS=1600 SLOWMO=250 playwright test --headed --workers=1",
-    "step": "STEP=1 playwright test --headed --workers=1"
+    "flows": "node scripts/build-web.js && playwright test; node scripts/build-flows-gallery.js",
+    "watch": "node scripts/build-web.js && PAUSE_MS=1600 SLOWMO=250 playwright test --headed --workers=1",
+    "step": "node scripts/build-web.js && STEP=1 playwright test --headed --workers=1",
+    "build:web": "node scripts/build-web.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.65.0"
