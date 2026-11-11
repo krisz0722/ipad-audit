@@ -63,10 +63,12 @@ node --test tests/seller_parse.test.js
 Local preview:
 
 ```
-python3 -m http.server 8000 --directory web
+scripts/serve.sh
 ```
 
-The page then opens at `http://localhost:8000/`. Typing `DEMO` into the invite code field starts a trial mode: the Send button sends nothing and shows what would have been sent. The seller opens the plain address and types the 9-digit invite code on the first screen. A `#CODE` appended to the address only prefills the field.
+The page then opens at `http://localhost:8766/`. The port is always 8766, and the script also prints the address to use from an iPad. Typing `DEMO` into the invite code field starts a trial mode: the Send button sends nothing and shows what would have been sent. The seller opens the plain address and types the 9-digit invite code on the first screen. A `#CODE` appended to the address only prefills the field. The `#DEMO` page shows a list at the top with a button for every screen and state (iPad iOS 9 to 17, a computer with USB, Mac, every preview and final screen) that jumps straight there. Deep links work too, for example `#DEMO-ios9-review-log`. They exist only on the `#DEMO` address and have no effect with a real invite code.
+
+The whole flow with Mermaid diagrams and the walked-through scenarios: [docs/flows.en.md](docs/flows.en.md). The scenarios are Playwright tests; after `npm install`, `npm run flows` runs them and builds a step-by-step screenshot gallery in `flows-out/index.html`.
 
 Dependencies of the Python part: [requirements.txt](requirements.txt). Tests: [tests/test_core.py](tests/test_core.py).
 

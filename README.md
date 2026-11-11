@@ -63,10 +63,12 @@ node --test tests/seller_parse.test.js
 Helyi kipróbálás:
 
 ```
-python3 -m http.server 8000 --directory web
+scripts/serve.sh
 ```
 
-Ezután a `http://localhost:8000/` címen nyílik meg az oldal. A meghívókód mezőbe a `DEMO` szót írva próbaüzem indul: a Küldés gomb nem küld el semmit, hanem megmutatja, mi ment volna el. Az eladó a sima címet nyitja meg, és a 9 számjegyű meghívókódot a nyitóoldalon írja be. A címhez fűzött `#KÓD` csak előtölti a mezőt.
+Ezután a `http://localhost:8766/` címen nyílik meg az oldal. A port mindig 8766, a script kiírja az iPadhez használható címet is. A meghívókód mezőbe a `DEMO` szót írva próbaüzem indul: a Küldés gomb nem küld el semmit, hanem megmutatja, mi ment volna el. Az eladó a sima címet nyitja meg, és a 9 számjegyű meghívókódot a nyitóoldalon írja be. A címhez fűzött `#KÓD` csak előtölti a mezőt. A `#DEMO` oldalon felül egy lista van minden képernyőre és állapotra (iPad iOS 9-től 17-ig, számítógép USB-vel, Mac, minden előnézet és végeredmény), egy kattintással odaugrik. Mélylink is használható, például `#DEMO-ios9-review-log`. Ezek csak a `#DEMO` címen léteznek, éles meghívókódnál semmi hatásuk.
+
+A teljes folyamat Mermaid diagramokkal és a végigjárt forgatókönyvekkel: [docs/flows.md](docs/flows.md). A forgatókönyvek Playwright tesztek, `npm install` után az `npm run flows` lefuttatja őket, és lépésenkénti képernyőkép-galériát épít a `flows-out/index.html` fájlba.
 
 A Python rész függőségei: [requirements.txt](requirements.txt). A tesztek: [tests/test_core.py](tests/test_core.py).
 
