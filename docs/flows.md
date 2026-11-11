@@ -98,19 +98,22 @@ flowchart LR
   I["Hardverteszt bevezető"] -->|"Elkezdem"| T["Érintés"]
   I -->|"Kihagyom az egészet"| X["Tovább"]
   T --> MO["Mozgás"] --> AU["Hang és mikrofon"] --> CR["Hátlapi kamera"] --> CF["Előlapi kamera"] --> DI["Kijelző színei"] --> X
+  I -->|"Mac"| KB["Billentyűzet"] --> PT["Egér és trackpad"] --> AU2["Hang és mikrofon"] --> CF2["Előlapi kamera"] --> DI2["Kijelző színei"] --> X
 ```
 
-Minden tesztnél három kimenet lehet: lefut (eredmény), kihagyja az eladó, vagy a böngésző nem engedi (iOS 9 és 10 kamerára és mikrofonra). Macen csak a hang, az előlapi kamera és a kijelző van.
+Minden tesztnél három kimenet lehet: lefut (eredmény), kihagyja az eladó, vagy a böngésző nem engedi (iOS 9 és 10 kamerára és mikrofonra). Macen: billentyűzet, egér és trackpad, hang, előlapi kamera és kijelző.
 
 | Teszt | Mit mér | Jelölés a riportban | Mikortól működik |
 |---|---|---|---|
+| Billentyűzet (Mac) | minden billentyű lenyomásra kigyullad, ANSI vagy ISO kiosztás, a felső funkciósor csak az Fn-nel, a dupla leütés gyanút jelzi | mért | minden modern böngészőben (kell a billentyű fizikai kódja) |
+| Egér és trackpad (Mac) | a kurzor rácson, öt kattintási pont (a sarkok is), jobb kattintás, görgetés fel és le. Nem kötelező: vízszintes görgetés, csippentés, dupla kattintás | mért | minden modern böngészőben |
 | Érintőképernyő | 8x12 mezős rács, minden mezőt érzékelni kell, a végén két ujj | mért | iOS 9-től |
 | Mozgásérzékelők | a gyorsulás tartománya mindkét tengelyen és a forgás | mért | iOS 9-től (iOS 13-tól engedélyt kér) |
 | Hangszóró és mikrofon | négy hangjelzés a bal és a jobb csatornán, a mikrofon meghallja-e | mért | iOS 11-től |
 | Hátlapi és előlapi kamera | élő, nem egyszínű kép érkezik-e | mért | iOS 11-től |
 | Kijelző színei | hat szín, az eladó jelzi, ha hibát lát | bemondás | iOS 9-től |
 
-A gombok, a fejhallgató-aljzat és a töltőport tesztje nincs meg. A kamera, a mikrofon és az érintővezérlő jelenléte USB-n át kiolvasható lenne, de a működésüket nem bizonyítja. Ez még nincs beépítve.
+A billentyűzet teszt nem látja az Fn, a hangerő, a fényerő és a Touch ID billentyűt, mert a rendszer elnyeli őket. A gombok, a fejhallgató-aljzat és a töltőport tesztje nincs meg. A kamera, a mikrofon és az érintővezérlő jelenléte USB-n át kiolvasható lenne, de a működésüket nem bizonyítja. Ez még nincs beépítve.
 
 ## 5. Az USB-s program ajánlata és a számítógépes ág
 
@@ -144,7 +147,7 @@ flowchart TD
   MP -->|"érvényes"| MRES["Modell, chip, memória, tárhely, sorozatszám, akku, zár, céges felügyelet"]
   MRES --> D["Az eszköz adatai"]
   MM --> D
-  D -->|"Elkezdem"| HW["Hang, előlapi kamera, kijelző"]
+  D -->|"Elkezdem"| HW["Billentyűzet, egér és trackpad, hang, előlapi kamera, kijelző"]
   D -->|"Kihagyom"| R["Előnézet"]
   HW --> R
 ```
@@ -228,8 +231,13 @@ Az alábbi forgatókönyvek mind lefutnak (`npm run e2e`), a fájljaik: [tests/e
 | `pc-win-serial-hidden` | A sorozatszám küldésének kikapcsolása: csak lenyomat megy el | Számítógép, USB-s kiolvasás (iPad vagy iPhone) | 10 |
 | `pc-win-usb` | Windows, az iPad USB-n át kiolvasva | Számítógép, USB-s kiolvasás (iPad vagy iPhone) | 10 |
 | `mac-bad-paste` | Mac: hibás Terminál kimenet beillesztése | Mac eladása | 5 |
-| `mac-command-hw` | Mac: parancs a Terminálból, hang, előlapi kamera, kijelző | Mac eladása | 17 |
+| `mac-command-hw` | Mac: parancs a Terminálból, hang, előlapi kamera, kijelző | Mac eladása | 29 |
+| `mac-keyboard-double` | Mac: az A billentyű egy nyomásra kétszer reagál (dupla leütés gyanú) | Mac eladása | 15 |
+| `mac-keyboard-iso` | Mac: ISO (európai, magyar) billentyűzet, a funkciósor nélkül | Mac eladása | 15 |
+| `mac-keyboard-missing` | Mac: két billentyű nem reagál (Q és fel nyíl), a teszt hibás | Mac eladása | 15 |
+| `mac-keyboard-pointer-skip` | Mac: a billentyűzet és az egér teszt kihagyva, a riportban nem tesztelt | Mac eladása | 14 |
 | `mac-manual` | Mac: a parancs nem megy, kézi megadás, hardverteszt nélkül | Mac eladása | 9 |
+| `mac-pointer-partial` | Mac: a trackpad sarkai és a jobb kattintás nem működik, a teszt hibás | Mac eladása | 15 |
 | `welcome-code-errors` | Nyitóoldal: üres és hibás meghívókód, a példa riport kinyitása | Nyitás és hibák | 5 |
 | `demo-sends-nothing` | Próbaüzem (DEMO): semmi nem megy ki a hálózatra | Küldés és a backend hibaágai | 9 |
 | `send-invalid-invite` | Küldés: érvénytelen meghívókód | Küldés és a backend hibaágai | 9 |
@@ -332,6 +340,8 @@ A `#DEMO` cím után egy kötőjellel és az azonosítóval közvetlenül az ado
 | `#DEMO-mac-manual` | Kézi megadás (ha a parancs nem megy) |
 | `#DEMO-mac-details` | Az eszköz adatai, parancsból kitöltve |
 | `#DEMO-mac-hw-intro` | Hardverteszt bevezető |
+| `#DEMO-mac-hw-keyboard` | Billentyűzet teszt |
+| `#DEMO-mac-hw-pointer` | Egér és trackpad teszt |
 | `#DEMO-mac-hw-audio` | Hang és mikrofon teszt |
 | `#DEMO-mac-review-ok` | Előnézet: minden rendben |
 | `#DEMO-mac-review-mdm` | Előnézet: céges felügyelet, zár bekapcsolva, hibás tesztek |
@@ -343,4 +353,5 @@ A `#DEMO` cím után egy kötőjellel és az azonosítóval közvetlenül az ado
 
 - A képernyőképek Chrome-ból vannak, nem Safariból. Az iOS 9 Safari sajátosságait (például hogy az `isTrusted` nincs megadva) valódi iPaden kell kipróbálni.
 - A hang-teszt a Chrome hamis mikrofonjával fut, ezért az eredménye gyakran részleges vagy hibás. A kamerateszt a hamis kamerával fut, a `facingMode` megkötés nélkül, mert a hamis kamera azt nem ismeri.
+- A billentyű- és egérteszt a Playwright valódi (megbízható) bemeneti eseményeivel fut. A valódi Mac billentyűzet és trackpad viselkedését (a Caps Lock leütése, a rendszerbillentyűk elnyelése, a kétujjas kattintás) valódi Macen kell kipróbálni.
 - A valódi USB-s kiolvasás, a valódi Apps Script és a valódi érintés valódi eszközön nincs automatizálva. A backend hívásokat hamis válaszok helyettesítik, az éles backendet a tesztek soha nem érik el.
