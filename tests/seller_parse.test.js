@@ -343,9 +343,9 @@ test('hardverteszt a riportban: mért és bemondás jelölés, hiányzó teszt, 
   assert.match(summary.value, /1 rendben, 1 hibás, 3 nem tesztelt/);
 });
 
-test('hardverteszt: Macnél csak a hang, az előlapi kamera és a kijelző szerepel', () => {
+test('hardverteszt: Macnél a billentyűzet, az egér, a hang, az előlapi kamera és a kijelző szerepel', () => {
   const rows = section(P.buildSections(sampleData({ kind: 'mac' })), 'Hardverteszt').rows.map((r) => r.label);
-  assert.deepStrictEqual(rows, ['Hangszóró és mikrofon', 'Előlapi kamera', 'Kijelző színei']);
+  assert.deepStrictEqual(rows, ['Billentyűzet', 'Egér és trackpad', 'Hangszóró és mikrofon', 'Előlapi kamera', 'Kijelző színei']);
 });
 
 test('hardverteszt: ha minden mért teszt rendben, az összegzés ok', () => {
@@ -364,4 +364,108 @@ test('iPaden USB nélkül a modell, tárhely és sorozatszám nem "nem adta meg"
   assert.strictEqual(byLabel('Tárhely').value, 'USB nélkül nem olvasható ki');
   assert.strictEqual(byLabel('Sorozatszám vége').value, 'USB nélkül nem olvasható ki');
   assert.strictEqual(byLabel('Rendszerverzió').value, '9.3.5');
+});
+
+/* ---- billentyűzet és egér (Mac) ---- */
+
+function allCodes(rows) { return rows.reduce((a, r) => a.concat(r), []); }
+
+test('billentyűzet kiosztás: az ISO eggyel több kötelező billentyű, a funkciósor soft', () => {
+  const ansi = allCodes(P.keyboardLayout('ansi')), iso = allCodes(P.keyboardLayout('iso'));
+  const required = (keys) => keys.filter((k) => !k.soft);
+  assert.strictEqual(required(iso).length, required(ansi).length + 1);
+  assert.ok(iso.some((k) => k.code === 'IntlBackslash') && !ansi.some((k) => k.code === 'IntlBackslash'));
+  assert.strictEqual(ansi.filter((k) => k.soft).length, 12);
+  assert.ok(ansi.every((k) => k.code && k.label && k.w > 0));
+  assert.strictEqual(new Set(ansi.map((k) => k.code)).size, ansi.length, 'nincs ismétlődő billentyű kód');
+});
+
+test('billentyűzet: ha minden kötelező billentyű érzékelt, rendben, a funkciósor nem kötelező', () => {
+  const rows = P.keyboardLayout('ansi'), t = P.keyboardTracker(rows);
+  for (const k of allCodes(rows).filter((x) => !x.soft)) { t.down(k.code, false); t.up(k.code); }
+  const st = t.state();
+  assert.strictEqual(st.complete, true);
+  assert.strictEqual(st.softPressed, 0);
+  const v = P.keyboardVerdict(st);
+  assert.strictEqual(v.status, 'ok');
+  assert.match(v.detail, /^mind a \d+ billentyű érzékelt, dupla leütés nélkül, funkciósor 0 \/ 12/);
+});
+
+test('billentyűzet: a hiányzó billentyűket felsorolja, és hibás lesz', () => {
+  const rows = P.keyboardLayout('ansi'), t = P.keyboardTracker(rows);
+  for (const k of allCodes(rows).filter((x) => !x.soft && x.code !== 'KeyQ' && x.code !== 'ArrowUp')) { t.down(k.code, false); t.up(k.code); }
+  const v = P.keyboardVerdict(t.state());
+  assert.strictEqual(v.status, 'bad');
+  assert.match(v.detail, /nem érzékelt: Q, ↑/);
+});
+
+test('billentyűzet: a funkciósor érzékelése megjelenik, de nem kötelező', () => {
+  const rows = P.keyboardLayout('ansi'), t = P.keyboardTracker(rows);
+  for (const k of allCodes(rows)) { t.down(k.code, false); t.up(k.code); }
+  const st = t.state();
+  assert.strictEqual(st.softPressed, 12);
+  assert.match(P.keyboardVerdict(st).detail, /funkciósor 12 \/ 12/);
+});
+
+test('billentyűzet: a Caps Lock csak felengedésre is érzékelt (Macen így viselkedik)', () => {
+  const t = P.keyboardTracker(P.keyboardLayout('ansi'));
+  t.up('CapsLock');
+  assert.ok(!t.state().missing.includes('CapsLock'));
+});
+
+test('billentyűzet: felengedés nélküli második leütés dupla leütés gyanú, az ismétlés nem', () => {
+  const rows = P.keyboardLayout('ansi'), t = P.keyboardTracker(rows);
+  for (const k of allCodes(rows).filter((x) => !x.soft)) { t.down(k.code, false); t.up(k.code); }
+  t.down('KeyA', false);
+  t.down('KeyA', true);
+  assert.deepStrictEqual(t.state().doubles, []);
+  t.down('KeyA', false);
+  const st = t.state();
+  assert.deepStrictEqual(st.doubleLabels, ['A']);
+  const v = P.keyboardVerdict(st);
+  assert.strictEqual(v.status, 'bad');
+  assert.match(v.detail, /dupla leütés gyanú: A/);
+});
+
+test('billentyűzet: az ismeretlen kód nem számít hibának, de külön listázott', () => {
+  const t = P.keyboardTracker(P.keyboardLayout('ansi'));
+  t.down('Fn', false);
+  assert.deepStrictEqual(t.state().unknown, ['Fn']);
+});
+
+function pointerDone(t, skip) {
+  for (let i = 0; i < 48; i++) t.move(i);
+  for (const [id] of P.POINTER_TARGETS) if (id !== skip) t.target(id);
+}
+
+test('egér és trackpad: minden kötelező elem után rendben, a nem kötelezők külön jelölve', () => {
+  const t = P.pointerTracker(48);
+  pointerDone(t);
+  t.right(); t.wheel(0, 40, false); t.wheel(0, -40, false);
+  const v = P.pointerVerdict(t.state());
+  assert.strictEqual(v.status, 'ok');
+  assert.match(v.detail, /mind a 48 mezőn végigért, mind az 5 kattintási pont/);
+  assert.match(v.detail, /vízszintes görgetés nem, csippentés nem, dupla kattintás nem/);
+});
+
+test('egér és trackpad: a hiányzó elemeket felsorolja', () => {
+  const t = P.pointerTracker(48);
+  for (let i = 0; i < 30; i++) t.move(i);
+  t.target('tl'); t.target('c');
+  t.wheel(0, 40, false);
+  const v = P.pointerVerdict(t.state());
+  assert.strictEqual(v.status, 'bad');
+  assert.match(v.detail, /csak 30 \/ 48 mezőn/);
+  assert.match(v.detail, /nem érzékelt kattintás: jobb felső sarok, bal alsó sarok, jobb alsó sarok/);
+  assert.match(v.detail, /jobb kattintás \(kétujjas\) nem érzékelt/);
+  assert.match(v.detail, /görgetés felfelé nem érzékelt/);
+  assert.ok(!/görgetés lefelé/.test(v.detail));
+});
+
+test('egér és trackpad: a Ctrl-os görgetés csippentésnek számít, nem görgetésnek', () => {
+  const t = P.pointerTracker(48);
+  t.wheel(0, 40, true);
+  const st = t.state();
+  assert.strictEqual(st.pinch, true);
+  assert.strictEqual(st.down, false);
 });

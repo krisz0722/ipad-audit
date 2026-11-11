@@ -207,11 +207,128 @@
   }
   function frameLooksReal(stats) { return stats.std >= 12 && stats.mean >= 8 && stats.mean <= 247; }
 
+  // Billentyűzet (Mac): a billentyűket a fizikai kódjuk (event.code) azonosítja, így a nyelvi kiosztástól független.
+  // A felső funkciósort (F1 és F12) a Mac alapból hangerő, fényerő és hasonló rendszerbillentyűnek veszi, ezt a böngésző
+  // csak az Fn billentyűvel együtt kapja meg, ezért ez "soft": nem számít hibának, ha nem érzékeljük.
+  function keyboardLayout(kind) {
+    function k(code, label, w, soft) { return { code: code, label: label, w: w || 1, soft: !!soft }; }
+    function letters(str) { var o = [], i; for (i = 0; i < str.length; i++) o.push(k('Key' + str.charAt(i), str.charAt(i))); return o; }
+    var iso = kind === 'iso', fn = [k('Escape', 'esc', 1.5)], nums = [k('Backquote', '`')], f, n;
+    for (f = 1; f <= 12; f++) fn.push(k('F' + f, 'F' + f, 1, true));
+    for (n = 1; n <= 9; n++) nums.push(k('Digit' + n, String(n)));
+    nums.push(k('Digit0', '0'), k('Minus', '-'), k('Equal', '='), k('Backspace', 'törlés', 2));
+    var top = [k('Tab', 'tab', 1.5)].concat(letters('QWERTYUIOP'), [k('BracketLeft', '['), k('BracketRight', ']')]);
+    if (!iso) top.push(k('Backslash', '\\', 1.5));
+    var home = [k('CapsLock', 'caps', 1.8)].concat(letters('ASDFGHJKL'), [k('Semicolon', ';'), k('Quote', "'")]);
+    if (iso) home.push(k('Backslash', '#'));
+    home.push(k('Enter', 'enter', iso ? 1.4 : 2.2));
+    var bottom = [k('ShiftLeft', 'shift', iso ? 1.3 : 2.4)];
+    if (iso) bottom.push(k('IntlBackslash', '<'));
+    bottom = bottom.concat(letters('ZXCVBNM'), [k('Comma', ','), k('Period', '.'), k('Slash', '/'), k('ShiftRight', 'shift', iso ? 2.7 : 2.4)]);
+    var space = [k('ControlLeft', 'ctrl', 1.2), k('AltLeft', 'opt', 1.2), k('MetaLeft', 'cmd', 1.3), k('Space', 'szóköz', 5.6),
+      k('MetaRight', 'cmd', 1.3), k('AltRight', 'opt', 1.2), k('ArrowLeft', '←'), k('ArrowUp', '↑'), k('ArrowDown', '↓'), k('ArrowRight', '→')];
+    return [fn, nums, top, home, bottom, space];
+  }
+
+  function keyboardTracker(rows) {
+    var required = {}, soft = {}, label = {}, pressed = {}, down = {}, doubles = {}, unknown = {}, order = [], total = 0, softTotal = 0, r, c, key;
+    for (r = 0; r < rows.length; r++) {
+      for (c = 0; c < rows[r].length; c++) {
+        key = rows[r][c];
+        label[key.code] = key.label;
+        if (key.soft) { soft[key.code] = true; softTotal++; } else { required[key.code] = true; order.push(key.code); total++; }
+      }
+    }
+    function mark(code) {
+      if (required[code] || soft[code]) pressed[code] = true; else unknown[code] = true;
+    }
+    return {
+      down: function (code, repeat) {
+        if (!code) return;
+        // Két leütés felengedés nélkül: egy fizikai nyomásra kétszer reagál (a pillangó-billentyűzetek tipikus hibája).
+        if (down[code] && !repeat && code !== 'CapsLock') doubles[code] = (doubles[code] || 0) + 1;
+        down[code] = true;
+        mark(code);
+      },
+      // A Caps Lock Macen csak bekapcsoláskor ad leütést, kikapcsoláskor csak felengedést.
+      up: function (code) {
+        if (!code) return;
+        down[code] = false;
+        if (code === 'CapsLock') mark(code);
+      },
+      state: function () {
+        var missing = [], missingLabels = [], doubleCodes = [], doubleLabels = [], unknownCodes = [], softPressed = 0, i, code;
+        for (i = 0; i < order.length; i++) {
+          code = order[i];
+          if (!pressed[code]) { missing.push(code); missingLabels.push(label[code]); }
+        }
+        for (code in soft) { if (Object.prototype.hasOwnProperty.call(soft, code) && pressed[code]) softPressed++; }
+        for (code in doubles) { if (Object.prototype.hasOwnProperty.call(doubles, code)) { doubleCodes.push(code); doubleLabels.push(label[code] || code); } }
+        for (code in unknown) { if (Object.prototype.hasOwnProperty.call(unknown, code)) unknownCodes.push(code); }
+        return { total: total, pressed: total - missing.length, missing: missing, missingLabels: missingLabels,
+          softTotal: softTotal, softPressed: softPressed, doubles: doubleCodes, doubleLabels: doubleLabels, unknown: unknownCodes,
+          complete: missing.length === 0 };
+      }
+    };
+  }
+
+  function keyboardVerdict(st) {
+    var fnText = st.softTotal ? ', funkciósor ' + st.softPressed + ' / ' + st.softTotal + ' (csak az Fn billentyűvel együtt mérhető, a hangerő és fényerő billentyűket a rendszer elnyeli)' : '';
+    if (st.missing.length || st.doubles.length) {
+      var parts = [];
+      if (st.missing.length) parts.push('nem érzékelt: ' + st.missingLabels.join(', '));
+      if (st.doubles.length) parts.push('dupla leütés gyanú: ' + st.doubleLabels.join(', '));
+      return { status: 'bad', detail: parts.join('; ') + ' (' + st.pressed + ' / ' + st.total + ' billentyű rendben)' + fnText };
+    }
+    return { status: 'ok', detail: 'mind a ' + st.total + ' billentyű érzékelt, dupla leütés nélkül' + fnText };
+  }
+
+  // Egér és trackpad (Mac): a kurzor mozgása rácson, öt kattintási pont (a trackpad sarkai is), jobb kattintás, görgetés fel és le.
+  // Nem kötelező: vízszintes görgetés, csippentés, dupla kattintás.
+  var POINTER_TARGETS = [['tl', 'bal felső sarok'], ['tr', 'jobb felső sarok'], ['bl', 'bal alsó sarok'], ['br', 'jobb alsó sarok'], ['c', 'közép']];
+  function pointerTracker(total) {
+    var cells = {}, count = 0, hits = {}, hitCount = 0, right = false, up = false, down = false, side = false, pinch = false, dbl = false;
+    return {
+      move: function (index) { if (index >= 0 && index < total && !cells[index]) { cells[index] = true; count++; } },
+      target: function (id) { if (!hits[id]) { hits[id] = true; hitCount++; } },
+      right: function () { right = true; },
+      wheel: function (dx, dy, ctrl) {
+        if (ctrl) { pinch = true; return; }
+        if (dy < 0) up = true;
+        if (dy > 0) down = true;
+        if (dx) side = true;
+      },
+      pinch: function () { pinch = true; },
+      dbl: function () { dbl = true; },
+      state: function () {
+        var missingTargets = [], i;
+        for (i = 0; i < POINTER_TARGETS.length; i++) { if (!hits[POINTER_TARGETS[i][0]]) missingTargets.push(POINTER_TARGETS[i][1]); }
+        return { cells: count, total: total, targets: hitCount, targetsTotal: POINTER_TARGETS.length, missingTargets: missingTargets,
+          right: right, up: up, down: down, side: side, pinch: pinch, dbl: dbl,
+          complete: count === total && hitCount === POINTER_TARGETS.length && right && up && down };
+      }
+    };
+  }
+
+  function pointerVerdict(st) {
+    function yn(v) { return v ? 'igen' : 'nem'; }
+    var extra = ' (nem kötelező: vízszintes görgetés ' + yn(st.side) + ', csippentés ' + yn(st.pinch) + ', dupla kattintás ' + yn(st.dbl) + ')';
+    if (st.complete) return { status: 'ok', detail: 'a kurzor mind a ' + st.total + ' mezőn végigért, mind az ' + st.targetsTotal + ' kattintási pont, a jobb kattintás és a görgetés fel és le rendben' + extra };
+    var bad = [];
+    if (st.cells < st.total) bad.push('a kurzor csak ' + st.cells + ' / ' + st.total + ' mezőn ért végig');
+    if (st.missingTargets.length) bad.push('nem érzékelt kattintás: ' + st.missingTargets.join(', '));
+    if (!st.right) bad.push('jobb kattintás (kétujjas) nem érzékelt');
+    if (!st.up) bad.push('görgetés felfelé nem érzékelt');
+    if (!st.down) bad.push('görgetés lefelé nem érzékelt');
+    return { status: 'bad', detail: bad.join('; ') + extra };
+  }
+
   var HW_LABELS = { touch: 'Érintőképernyő', motion: 'Mozgásérzékelők', audio: 'Hangszóró és mikrofon',
-    camera_rear: 'Hátlapi kamera', camera_front: 'Előlapi kamera', display: 'Kijelző színei' };
+    camera_rear: 'Hátlapi kamera', camera_front: 'Előlapi kamera', display: 'Kijelző színei',
+    keyboard: 'Billentyűzet', pointer: 'Egér és trackpad' };
   // Amit az oldal mér (a kijelző színei bemondás, ezért az összegzésben nem szerepel).
-  var HW_MEASURED = { ios: ['touch', 'motion', 'audio', 'camera_rear', 'camera_front'], mac: ['audio', 'camera_front'] };
-  var HW_SHOWN = { ios: ['touch', 'motion', 'audio', 'camera_rear', 'camera_front', 'display'], mac: ['audio', 'camera_front', 'display'] };
+  var HW_MEASURED = { ios: ['touch', 'motion', 'audio', 'camera_rear', 'camera_front'], mac: ['keyboard', 'pointer', 'audio', 'camera_front'] };
+  var HW_SHOWN = { ios: ['touch', 'motion', 'audio', 'camera_rear', 'camera_front', 'display'], mac: ['keyboard', 'pointer', 'audio', 'camera_front', 'display'] };
 
   // A riport szakaszai a Code.gs finish_ műveletének formátumában.
   function buildSections(d) {
@@ -374,6 +491,8 @@
   return {
     sha256Hex: sha256Hex, fingerprint: fingerprint, normalizeSerial: normalizeSerial, storageLabel: storageLabel,
     parseIpadFile: parseIpadFile, parseMacOutput: parseMacOutput, parseUsbOutput: parseUsbOutput, buildSections: buildSections, detectOs: detectOs,
-    touchTracker: touchTracker, motionTracker: motionTracker, toneVerdict: toneVerdict, frameStats: frameStats, frameLooksReal: frameLooksReal
+    touchTracker: touchTracker, motionTracker: motionTracker,
+    keyboardLayout: keyboardLayout, keyboardTracker: keyboardTracker, keyboardVerdict: keyboardVerdict,
+    pointerTracker: pointerTracker, pointerVerdict: pointerVerdict, POINTER_TARGETS: POINTER_TARGETS, toneVerdict: toneVerdict, frameStats: frameStats, frameLooksReal: frameLooksReal
   };
 });

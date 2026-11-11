@@ -793,9 +793,10 @@
 
   /* ---- hardverteszt: az oldal maga méri, mit érzékel az eszköz ---- */
 
-  var HW_FLOW = { ios: ['touch', 'motion', 'audio', 'camera_rear', 'camera_front', 'display'], mac: ['audio', 'camera_front', 'display'] };
+  var HW_FLOW = { ios: ['touch', 'motion', 'audio', 'camera_rear', 'camera_front', 'display'], mac: ['keyboard', 'pointer', 'audio', 'camera_front', 'display'] };
   var HW_TITLES = { touch: 'Érintőképernyő', motion: 'Mozgásérzékelők', audio: 'Hangszóró és mikrofon',
-    camera_rear: 'Hátlapi kamera', camera_front: 'Előlapi kamera', display: 'Kijelző színei' };
+    camera_rear: 'Hátlapi kamera', camera_front: 'Előlapi kamera', display: 'Kijelző színei',
+    keyboard: 'Billentyűzet', pointer: 'Egér és trackpad' };
 
   function sleep(ms) { return new Promise(function (resolve) { setTimeout(resolve, ms); }); }
   function hwList() { return HW_FLOW[state.kind === 'mac' ? 'mac' : 'ios']; }
@@ -820,8 +821,8 @@
     message('result', '<div class="' + cls + '">' + icon + esc(text) + '</div><button type="button" class="btn" id="hw-next">Tovább</button>');
     on('hw-next', hwNext);
   }
-  function hwScreen(name, lead, extra, supported, unavailableText) {
-    show(top() + progress(4) + '<h1>' + HW_TITLES[name] + '</h1><p class="lead">' + lead + '</p>' +
+  function hwScreen(name, lead, extra, supported, unavailableText, pre) {
+    show(top() + progress(4) + '<h1>' + HW_TITLES[name] + '</h1><p class="lead">' + lead + '</p>' + (pre || '') +
       (supported ? '<button type="button" class="btn" id="hw-start">Indítás</button><p><button type="button" class="link" id="hw-skip">Kihagyom</button></p>' : '') +
       (extra || '') + '<div id="result"></div>' + foot());
     if (!supported) { hwDone(name, 'unavailable', unavailableText); hwResult(name); return false; }
@@ -907,6 +908,149 @@
       if (st.cells >= st.total * 0.6) finish('bad', st.cells + ' / ' + st.total + ' mezőt érzékelt' + (st.multi ? ', két ujjal is' : ', két ujjas érintés nélkül'));
       else finish('skipped', 'csak ' + st.cells + ' / ' + st.total + ' mezőt érintett meg');
     }, 180000);
+  }
+
+  /* billentyűzet (Macen) */
+  SCREENS.hw_keyboard = function () {
+    var pre = '<div class="note"><b>Milyen az Enter billentyű alakja?</b>' +
+      '<label class="radio"><input type="radio" name="kbl" value="ansi" checked> Lapos, egysoros (amerikai, ANSI)</label>' +
+      '<label class="radio"><input type="radio" name="kbl" value="iso"> Magas, L alakú (európai, magyar, ISO)</label></div>';
+    if (hwScreen('keyboard', 'Nyomd meg egyenként az összes billentyűt, a képernyőn kigyulladnak. A felső F1-F12 sort az Fn billentyűvel együtt nyomd. A Cmd, Ctrl, Opt és Shift billentyűt önmagában nyomd meg, ne kombinációban. Az Fn, a hangerő, a fényerő és a Touch ID gombot a böngésző nem látja, ezeket nem kell megnyomnod.', '', true, '', pre)) {
+      on('hw-start', startKeyboard);
+    }
+  };
+
+  function startKeyboard() {
+    var radio = app.querySelector('input[name=kbl]:checked');
+    var rows = P.keyboardLayout(radio && radio.value === 'iso' ? 'iso' : 'ansi'), tracker = P.keyboardTracker(rows), finished = false;
+    var html = '<div id="key-wrap"><h2 id="key-note"></h2><div id="key-board">', r, c, key, i;
+    for (r = 0; r < rows.length; r++) {
+      html += '<div class="krow">';
+      for (c = 0; c < rows[r].length; c++) {
+        key = rows[r][c];
+        html += '<div class="kcell' + (key.soft ? ' soft' : '') + '" data-code="' + esc(key.code) + '" style="flex:' + key.w + ' 1 0">' + esc(key.label) + '</div>';
+      }
+      html += '</div>';
+    }
+    html += '</div><p id="key-list" class="muted"></p><div class="nav"><button type="button" class="btn" id="key-done">Kész</button>' +
+      '<button type="button" class="btn secondary" id="key-skip">Kihagyom</button></div></div>';
+    var overlay = document.createElement('div');
+    overlay.id = 'key-overlay';
+    overlay.innerHTML = html;
+    document.body.appendChild(overlay);
+    var cells = {}, nodes = overlay.querySelectorAll('.kcell');
+    for (i = 0; i < nodes.length; i++) cells[nodes[i].getAttribute('data-code')] = nodes[i];
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    function light(el) { if (el && el.className.indexOf(' on') < 0) el.className += ' on'; }
+    function refresh() {
+      var st = tracker.state();
+      $('key-note').textContent = st.complete ? 'Minden billentyű érzékelve. Nyomd meg a Kész gombot.' : 'Érzékelt billentyűk: ' + st.pressed + ' / ' + st.total;
+      $('key-list').textContent = (st.softTotal ? 'Funkciósor (az Fn-nel együtt): ' + st.softPressed + ' / ' + st.softTotal : '') +
+        (st.doubles.length ? '. Dupla leütés gyanú: ' + st.doubleLabels.join(', ') : '');
+    }
+    function finish(status, detail) {
+      if (finished) return;
+      finished = true;
+      window.removeEventListener('keydown', onDown, true);
+      window.removeEventListener('keyup', onUp, true);
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+      hwDone('keyboard', status, detail);
+      if (status === 'skipped' && !detail) { hwNext(); return; }
+      hwResult('keyboard');
+    }
+    function onDown(event) {
+      if (finished || event.isTrusted === false) return;
+      var code = event.code;
+      if (!code) { // régi böngésző: nincs event.code
+        finish('unavailable', 'a böngésző nem adja meg a billentyű fizikai kódját (túl régi böngésző), ezért ezt nem tudtuk ellenőrizni');
+        return;
+      }
+      event.preventDefault();
+      tracker.down(code, event.repeat);
+      var el = cells[code];
+      light(el);
+      // A kigyulladt billentyűn a valódi felirat látszik (például a magyar kiosztás betűi).
+      if (el && event.key && event.key.length === 1 && /^(Key|Digit|Semicolon|Quote|Comma|Period|Slash|Bracket|Minus|Equal|Backquote|IntlBackslash|Backslash)/.test(code)) el.textContent = event.key.toUpperCase();
+      refresh();
+    }
+    function onUp(event) {
+      if (finished || event.isTrusted === false || !event.code) return;
+      event.preventDefault();
+      tracker.up(event.code);
+      if (event.code === 'CapsLock') light(cells.CapsLock);
+      refresh();
+    }
+    window.addEventListener('keydown', onDown, true);
+    window.addEventListener('keyup', onUp, true);
+    $('key-done').addEventListener('click', function () { var v = P.keyboardVerdict(tracker.state()); finish(v.status, v.detail); });
+    $('key-skip').addEventListener('click', function () { finish('skipped'); });
+    refresh();
+  }
+
+  /* egér és trackpad (Macen) */
+  SCREENS.hw_pointer = function () {
+    if (hwScreen('pointer', 'Mozgasd végig a kurzort az egész képernyőn, kattints a kék karikákra (a négy sarokban és középen, így a trackpad sarkait is próbálod), kattints jobb gombbal vagy két ujjal, majd görgess felfelé és lefelé. Nem kötelező próbák: vízszintes görgetés, csippentés, dupla kattintás.', '', true, '')) {
+      on('hw-start', startPointer);
+    }
+  };
+
+  function startPointer() {
+    var cols = 8, rows = 6, total = cols * rows, tracker = P.pointerTracker(total), finished = false, r, c, t;
+    var html = '<table id="pointer-grid"><tbody>';
+    for (r = 0; r < rows; r++) { html += '<tr>'; for (c = 0; c < cols; c++) html += '<td></td>'; html += '</tr>'; }
+    html += '</tbody></table>';
+    for (t = 0; t < P.POINTER_TARGETS.length; t++) {
+      html += '<button type="button" class="ptarget p-' + P.POINTER_TARGETS[t][0] + '" data-id="' + P.POINTER_TARGETS[t][0] + '">' + (t + 1) + '</button>';
+    }
+    html += '<div id="pointer-panel"></div><div id="pointer-actions"><button type="button" class="btn" id="pointer-done">Kész</button>' +
+      '<button type="button" class="btn secondary" id="pointer-skip">Kihagyom</button></div>';
+    var overlay = document.createElement('div');
+    overlay.id = 'pointer-overlay';
+    overlay.innerHTML = html;
+    document.body.appendChild(overlay);
+    var cellEls = overlay.getElementsByTagName('td'), grid = $('pointer-grid');
+    function mark(v) { return v ? '✅' : '⬜'; }
+    function refresh() {
+      var st = tracker.state();
+      $('pointer-panel').innerHTML = 'Mozgás: ' + st.cells + ' / ' + st.total + ' mező<br>Bal kattintás: ' + st.targets + ' / ' + st.targetsTotal + ' pont<br>' +
+        'Jobb kattintás: ' + mark(st.right) + '<br>Görgetés felfelé: ' + mark(st.up) + ' lefelé: ' + mark(st.down) + '<br>' +
+        '<span class="muted">Nem kötelező: vízszintes görgetés ' + mark(st.side) + ' csippentés ' + mark(st.pinch) + ' dupla kattintás ' + mark(st.dbl) + '</span>' +
+        (st.complete ? '<br><b>Minden kötelező próba kész, nyomd meg a Kész gombot.</b>' : '');
+    }
+    function cellAt(x, y) {
+      var box = grid.getBoundingClientRect();
+      if (!box.width || !box.height) return -1;
+      var col = Math.floor((x - box.left) * cols / box.width), row = Math.floor((y - box.top) * rows / box.height);
+      if (col < 0 || col >= cols || row < 0 || row >= rows) return -1;
+      return row * cols + col;
+    }
+    function finish(status, detail) {
+      if (finished) return;
+      finished = true;
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+      hwDone('pointer', status, detail);
+      if (status === 'skipped' && !detail) { hwNext(); return; }
+      hwResult('pointer');
+    }
+    overlay.addEventListener('mousemove', function (e) {
+      if (finished || e.isTrusted === false) return;
+      var i = cellAt(e.clientX, e.clientY);
+      if (i >= 0) { tracker.move(i); if (cellEls[i].className !== 'on') cellEls[i].className = 'on'; }
+      refresh();
+    }, false);
+    // A kattintás csak akkor számít, ha tényleg a mutató nyomta (a billentyűzettel kiváltott kattintásnak nincs detail értéke).
+    overlay.addEventListener('click', function (e) {
+      if (finished || e.isTrusted === false || !(e.detail > 0)) return;
+      var id = e.target && e.target.getAttribute ? e.target.getAttribute('data-id') : null;
+      if (id) { tracker.target(id); if (e.target.className.indexOf(' on') < 0) e.target.className += ' on'; refresh(); }
+    }, false);
+    overlay.addEventListener('contextmenu', function (e) { e.preventDefault(); if (finished || e.isTrusted === false) return; tracker.right(); refresh(); }, false);
+    overlay.addEventListener('wheel', function (e) { e.preventDefault(); if (finished || e.isTrusted === false) return; tracker.wheel(e.deltaX, e.deltaY, e.ctrlKey); refresh(); }, false);
+    overlay.addEventListener('dblclick', function (e) { if (finished || e.isTrusted === false) return; tracker.dbl(); refresh(); }, false);
+    overlay.addEventListener('gesturechange', function (e) { e.preventDefault(); tracker.pinch(); refresh(); }, false);
+    $('pointer-done').addEventListener('click', function () { var v = P.pointerVerdict(tracker.state()); finish(v.status, v.detail); });
+    $('pointer-skip').addEventListener('click', function () { finish('skipped'); });
+    refresh();
   }
 
   /* mozgásérzékelők */
@@ -1319,10 +1463,22 @@
   function demoHw(kind, mode) {
     var out = {}, list = HW_FLOW[kind === 'mac' ? 'mac' : 'ios'], i, name;
     if (mode === 'none') return out;
-    var good = { touch: 'minden mező érzékelve, két ujj is', motion: 'mért mozgás: 12 és 10 m/s² tartomány, 55 °/s forgás',
+    function demoKeyboard(allKeys) {
+      var kr = P.keyboardLayout('ansi'), kt = P.keyboardTracker(kr), a, b;
+      for (a = 0; a < kr.length; a++) { for (b = 0; b < kr[a].length; b++) { if (allKeys || kr[a][b].code !== 'KeyQ') { kt.down(kr[a][b].code, false); kt.up(kr[a][b].code); } } }
+      return P.keyboardVerdict(kt.state());
+    }
+    function demoPointer(allDone) {
+      var pt = P.pointerTracker(48), q;
+      for (q = 0; q < (allDone ? 48 : 30); q++) pt.move(q);
+      pt.target('tl'); pt.target('c'); pt.wheel(0, 40, false);
+      if (allDone) { pt.target('tr'); pt.target('bl'); pt.target('br'); pt.right(); pt.wheel(0, -40, false); }
+      return P.pointerVerdict(pt.state());
+    }
+    var good = { keyboard: demoKeyboard(true).detail, pointer: demoPointer(true).detail, touch: 'minden mező érzékelve, két ujj is', motion: 'mért mozgás: 12 és 10 m/s² tartomány, 55 °/s forgás',
       audio: 'a hangszóró és a mikrofon rendben, a mikrofon meghallotta a hangjelzéseket', camera_rear: 'élő kép érkezik',
       camera_front: 'élő kép érkezik', display: 'az eladó nem látott hibát' };
-    var bad = { touch: ['ok', good.touch], motion: ['bad', 'nem érkezett mozgásadat az érzékelőtől'], audio: ['bad', 'a mikrofon nem hallotta a hangszórót'],
+    var bad = { keyboard: [demoKeyboard(false).status, demoKeyboard(false).detail], pointer: [demoPointer(false).status, demoPointer(false).detail], touch: ['ok', good.touch], motion: ['bad', 'nem érkezett mozgásadat az érzékelőtől'], audio: ['bad', 'a mikrofon nem hallotta a hangszórót'],
       camera_rear: ['bad', 'csak fekete vagy egyszínű kép érkezett'], camera_front: ['ok', good.camera_front], display: ['bad', 'az eladó hibát látott a kijelzőn'] };
     var legacy = { touch: ['ok', good.touch], motion: ['ok', good.motion], display: ['ok', good.display] };
     for (i = 0; i < list.length; i++) {
@@ -1450,6 +1606,8 @@
   demo(GMAC, 'mac-manual', 'Kézi megadás (ha a parancs nem megy)', { env: 'macpc', kind: 'mac', screen: 'mac_manual' });
   demo(GMAC, 'mac-details', 'Az eszköz adatai, parancsból kitöltve', { env: 'macpc', kind: 'mac', vals: 'mac', route: 'command', apple: '', screen: 'details' });
   demo(GMAC, 'mac-hw-intro', 'Hardverteszt bevezető', { env: 'macpc', kind: 'mac', vals: 'mac', route: 'command', screen: 'hw_intro' });
+  demo(GMAC, 'mac-hw-keyboard', 'Billentyűzet teszt', { env: 'macpc', kind: 'mac', screen: 'hw_keyboard' });
+  demo(GMAC, 'mac-hw-pointer', 'Egér és trackpad teszt', { env: 'macpc', kind: 'mac', screen: 'hw_pointer' });
   demo(GMAC, 'mac-hw-audio', 'Hang és mikrofon teszt', { env: 'macpc', kind: 'mac', screen: 'hw_audio' });
   demo(GMAC, 'mac-review-ok', 'Előnézet: minden rendben', { env: 'macpc', kind: 'mac', vals: 'mac', route: 'command', hw: 'ok', screen: 'review' });
   demo(GMAC, 'mac-review-mdm', 'Előnézet: céges felügyelet, zár bekapcsolva, hibás tesztek', { env: 'macpc', kind: 'mac', vals: 'macmdm', route: 'command', hw: 'bad', apple: 'no', screen: 'review' });
