@@ -3,7 +3,7 @@
   "private": true,
   "description": "Remote condition check for used iPads, iPhones and Macs",
   "scripts": {
-    "test": "node --test tests/seller_parse.test.js tests/example.test.js tests/docs.test.js tests/backend.test.js",
+    "test": "node --test tests/seller_parse.test.js tests/example.test.js tests/docs.test.js tests/backend.test.js tests/es5.test.js",
     "e2e": "playwright test",
     "gallery": "node scripts/build-flows-gallery.js",
     "flows": "playwright test; node scripts/build-flows-gallery.js",

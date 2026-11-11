@@ -54,6 +54,14 @@ Adatút az eladói módban: böngésző, Google Apps Script, email a vásárlón
 
 ## Fejlesztés
 
+Az összes egységteszt (kiolvasók, backend, dokumentáció, és egy védőháló, ami az iOS 9-es Safari miatt tiltja a modern szintaxist a web/ mappában) egy paranccsal fut:
+
+```
+npm test
+```
+
+Ezt a GitLab és a GitHub is lefuttatja minden push után, a GitLab Pages csak zöld teszt után frissül.
+
 A böngészős kiolvasók tesztje:
 
 ```

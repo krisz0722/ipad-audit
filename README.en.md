@@ -54,6 +54,14 @@ Data path in seller mode: browser, Google Apps Script, email to the buyer.
 
 ## Development
 
+All unit tests (the readers, the backend, the documentation, and a guard that forbids modern syntax in the web/ folder because of the iOS 9 Safari) run with one command:
+
+```
+npm test
+```
+
+GitLab and GitHub both run it after every push, and GitLab Pages only updates after a green test.
+
 Tests for the in-browser readers:
 
 ```
