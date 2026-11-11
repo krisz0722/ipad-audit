@@ -11,6 +11,7 @@ var SESSION_SECONDS = 21600; // A CacheService felső korlátja.
 var COLS = { code: 1, label: 2, expires: 3, status: 4, used: 5 };
 var CODE_DIGITS = 9;
 var MAX_FAILS_PER_HOUR = 30;
+var SITE_URL = 'https://apple.audit.kokocloud.space/'; // Az eladói oldal címe, a meghívó linkje ebből készül.
 
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('iPad audit').addItem('Új meghívó', 'newInvite').addToUi();
@@ -21,7 +22,7 @@ function sheet_() {
   var sheet = book.getSheetByName(SHEET_NAME);
   if (!sheet) {
     sheet = book.insertSheet(SHEET_NAME);
-    sheet.appendRow(['Kód', 'Címke', 'Lejárat', 'Állapot', 'Utolsó esemény']);
+    sheet.appendRow(['Kód', 'Címke', 'Lejárat', 'Állapot', 'Utolsó esemény', 'Link']);
     sheet.setFrozenRows(1);
   }
   return sheet;
@@ -59,14 +60,39 @@ function groupCode_(code) {
   return String(code).replace(/(\d{3})(?=\d)/g, '$1 ');
 }
 
+// A teljes, előtöltött link: az eladónak nem kell beírnia a kódot, a #kód előtölti a mezőt.
+function inviteLink_(code) {
+  return SITE_URL + '#' + code;
+}
+
+// A vásárló ezt az üzenetet küldi az eladónak. Minden, ami kell, benne van: a link és a kód.
+function inviteMessage_(code) {
+  return 'Az eszközöd állapotának ellenőrzéséhez nyisd meg ezt a linket: ' + inviteLink_(code) + '\n' +
+    'A meghívókód: ' + groupCode_(code) + ' (a linkben már benne van, nem kell beírnod). ' +
+    'A kód ' + INVITE_HOURS + ' óráig érvényes, és egyszer használható.';
+}
+
+function inviteDialogHtml_(code) {
+  return '<div style="font:14px system-ui,sans-serif">' +
+    '<p><b>A meghívó kész.</b> Kód: ' + esc_(groupCode_(code)) + '</p>' +
+    '<p>Ezt az üzenetet küldheted az eladónak:</p>' +
+    '<textarea id="m" rows="7" style="width:100%;box-sizing:border-box;font:14px system-ui,sans-serif" readonly>' + esc_(inviteMessage_(code)) + '</textarea>' +
+    '<p><button type="button" onclick="copyIt()">Másolás</button> <span id="s"></span></p></div>' +
+    '<script>function copyIt(){var t=document.getElementById("m");t.focus();t.select();var ok=false;' +
+    'try{ok=document.execCommand("copy");}catch(e){}' +
+    'document.getElementById("s").textContent=ok?"Kimásolva.":"Jelöld ki a szöveget, és másold ki kézzel.";}</script>';
+}
+
 function newInvite() {
   var ui = SpreadsheetApp.getUi();
   var answer = ui.prompt('Új meghívó', 'Kinek szól? (pl. Jófogás, Air 2)', ui.ButtonSet.OK_CANCEL);
   if (answer.getSelectedButton() !== ui.Button.OK) return;
   var code = randomDigits_(CODE_DIGITS);
   var expires = new Date(Date.now() + INVITE_HOURS * 3600 * 1000);
-  sheet_().appendRow([code, answer.getResponseText().slice(0, 80), expires, 'új', '']);
-  ui.alert('Meghívókód', groupCode_(code) + '\n\nEz egyszer használható, ' + INVITE_HOURS + ' óráig érvényes.', ui.ButtonSet.OK);
+  var sheet = sheet_();
+  if (!sheet.getRange(1, 6).getValue()) sheet.getRange(1, 6).setValue('Link');
+  sheet.appendRow([code, answer.getResponseText().slice(0, 80), expires, 'új', '', inviteLink_(code)]);
+  ui.showModalDialog(HtmlService.createHtmlOutput(inviteDialogHtml_(code)).setWidth(520).setHeight(330), 'Meghívó kész');
 }
 
 function json_(value) {

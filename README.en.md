@@ -76,7 +76,7 @@ Dependencies of the Python part: [requirements.txt](requirements.txt). Tests: [t
 
 1. Create a Google Sheet, open Extensions > Apps Script, and paste the contents of [backend/Code.gs](backend/Code.gs) and [backend/appsscript.json](backend/appsscript.json).
 2. Deploy it as a web app (execute as: you, access: anyone). Put the resulting `/exec` address into [web/config.js](web/config.js) and [tool/ipad_audit/config.py](tool/ipad_audit/config.py).
-3. The "New invite" item of the sheet's "iPad audit" menu issues a single-use code that is valid for 72 hours.
+3. The "New invite" item of the sheet's "iPad audit" menu issues a single-use code that is valid for 72 hours, and a ready message with the full link (the code is in it, so the seller does not have to type anything). The link also goes into the "Link" column of the sheet. The link is built from SITE_URL at the top of [backend/Code.gs](backend/Code.gs), change it to your own address.
 4. [.gitlab-ci.yml](.gitlab-ci.yml) publishes the `web/` folder to GitLab Pages.
 
 The `/exec` address is not a secret. Protection comes from the invite code and the daily mail limit.

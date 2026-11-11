@@ -76,7 +76,7 @@ A Python rész függőségei: [requirements.txt](requirements.txt). A tesztek: [
 
 1. Hozz létre egy Google Táblát, nyisd meg a Bővítmények > Apps Script menüt, és másold be a [backend/Code.gs](backend/Code.gs) és a [backend/appsscript.json](backend/appsscript.json) tartalmát.
 2. Telepítsd webalkalmazásként (futtatás: te, hozzáférés: bárki). A kapott `/exec` címet írd be a [web/config.js](web/config.js) és a [tool/ipad_audit/config.py](tool/ipad_audit/config.py) fájlba.
-3. A Tábla "iPad audit" menüjének "Új meghívó" pontja ad egyszer használható, 72 órás kódot.
+3. A Tábla "iPad audit" menüjének "Új meghívó" pontja egyszer használható, 72 órás kódot ad, és egy kész üzenetet a teljes linkkel (a kód benne van, az eladónak nem kell gépelnie). A link a Tábla "Link" oszlopába is bekerül. A link alapja a [backend/Code.gs](backend/Code.gs) elején lévő SITE_URL, ezt írd át a saját címedre.
 4. A [.gitlab-ci.yml](.gitlab-ci.yml) a `web/` mappát GitLab Pagesre publikálja.
 
 A `/exec` cím nem titok, a védelmet a meghívókód és a napi levélkorlát adja.
