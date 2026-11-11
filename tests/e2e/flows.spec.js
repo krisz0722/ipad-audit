@@ -124,6 +124,20 @@ test.describe('iPad iOS 9', () => {
     await f.step('Még egy Vissza: a nyitóoldal, ott nincs Vissza gomb', async () => { await page.locator('#back').click(); await expect(page.locator('#back')).toHaveCount(0); }, 'Az eszközöd állapotának ellenőrzése');
     await f.save();
   });
+
+  // Versenyhelyzet-védelem: a Vissza tartalék időzítője (250 ms) nem léphet vissza még egyszer, ha közben már továbbléptek.
+  test('ios9-fast-forward-after-back: gyors továbblépés a Vissza után nem lép vissza újra', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('#code').fill('DEMO');
+    await page.locator('#start').click();
+    await page.locator('#k-ios').click();
+    await page.locator('#l-found').click();
+    await expect(page.locator('h1').first()).toHaveText('A napló kimásolása');
+    await page.locator('#back').click();
+    await page.locator('#l-none').click();
+    await page.waitForTimeout(700);
+    await expect(page.locator('h1').first()).toHaveText('Nincs baj, erre van megoldás');
+  });
 });
 
 /* ---------------- iPad, iOS 11 és 12 ---------------- */
