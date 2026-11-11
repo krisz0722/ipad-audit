@@ -355,3 +355,13 @@ test('hardverteszt: ha minden mért teszt rendben, az összegzés ok', () => {
   assert.strictEqual(summary.status, 'ok');
   assert.match(summary.value, /^5 rendben$/);
 });
+
+test('iPaden USB nélkül a modell, tárhely és sorozatszám nem "nem adta meg", hanem USB nélkül nem olvasható ki', () => {
+  const sections = P.buildSections({ kind: 'ios', hw: {}, sources: {}, cycles: null, capacity: null, os: '9.3.5', fingerprint: '', serialTail: '', apple: 'yes' });
+  const device = sections.find((s) => s.title === 'Eszköz').rows;
+  const byLabel = (label) => device.find((r) => r.label === label);
+  assert.strictEqual(byLabel('Modell').value, 'USB nélkül nem olvasható ki');
+  assert.strictEqual(byLabel('Tárhely').value, 'USB nélkül nem olvasható ki');
+  assert.strictEqual(byLabel('Sorozatszám vége').value, 'USB nélkül nem olvasható ki');
+  assert.strictEqual(byLabel('Rendszerverzió').value, '9.3.5');
+});

@@ -93,7 +93,7 @@ table code { font: 13px ui-monospace, Menlo, Consolas, monospace; word-break: br
 
 a.btn { text-decoration: none; }
 
-#touch-overlay, #color-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 50; background: #fff; -webkit-user-select: none; user-select: none; }
+#touch-overlay, #color-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 99999; background: #fff; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
 #touch-grid { width: 100%; height: 100%; border-collapse: collapse; table-layout: fixed; }
 #touch-grid td { border: 1px solid #e7e5e4; padding: 0; }
 #touch-grid td.on { background: #22c55e; }
@@ -106,3 +106,9 @@ details.example { margin: 22px 0; padding: 14px 18px; background: var(--soft); b
 details.example[open] summary { margin-bottom: 8px; }
 details.example .tablewrap { background: var(--card); border-radius: 10px; }
 details.example summary { font-size: 18px; }
+
+.demo-panel { margin: 18px 0; padding: 14px 18px; border: 2px dashed var(--warn); border-radius: 14px; background: var(--card); }
+.demo-panel h2 { margin-top: 0; }
+.demo-list { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.demo-btn { text-align: left; padding: 10px 12px; font: inherit; font-size: 16px; color: var(--text); background: var(--soft); border: 1px solid var(--line); border-radius: 10px; }
+.demo-btn small { display: block; margin-top: 2px; color: var(--muted); font-size: 13px; }

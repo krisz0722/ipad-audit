@@ -8,7 +8,8 @@
   var P = window.SellerParse;
   var app = document.getElementById('app');
   var hash = (location.hash || '').replace('#', '').trim().toUpperCase();
-  var DEMO = hash === 'DEMO';
+  var DEMO = /^DEMO(-|$)/.test(hash);
+  var DEMO_ID = /^DEMO-/.test(hash) ? hash.slice(5).toLowerCase() : '';
   var CODE_PATTERN = /^(?:[0-9]{9}|[0-9A-Z]{12})$/;
   var CODE = CODE_PATTERN.test(hash) ? hash : '';
   var MAX_FILE = 50 * 1024 * 1024;
@@ -16,7 +17,9 @@
   // Melyik gépen nyitották meg az oldalt: az eladandó iOS eszközön, vagy egy számítógépen?
   var DEVICE = P.detectOs(navigator.userAgent, navigator.maxTouchPoints || 0);
   var ON_COMPUTER = !DEVICE;
+  var FORCE_OS = ''; // csak a próbaüzem állítja
   function computerOs() {
+    if (FORCE_OS) return FORCE_OS;
     var ua = navigator.userAgent;
     if (/Windows/.test(ua)) return 'windows';
     if (/Macintosh|Mac OS X/.test(ua)) return 'mac';
@@ -454,7 +457,7 @@
         sectionsHtml(P.buildSections(window.SellerExample.data)) + '</details>'
       : '';
     show(top() +
-      '<h1>Az eszközöd állapotának ellenőrzése</h1>' +
+      '<h1>Az eszközöd állapotának ellenőrzése</h1>' + (DEMO ? demoPanel() : '') +
       '<p class="lead">A vásárló szeretné látni az akkumulátor és az alapadatok állapotát, mielőtt megveszi az eszközt. Ez az oldal lépésről lépésre végigvezet rajta. Kb. 10 percet vesz igénybe, és nem kell semmit telepítened.</p>' +
       '<h2>Miért kérjük ezt?</h2>' +
       '<p>Egy használt eszköznél az akkumulátor kopását kívülről nem lehet megítélni. Ha mindketten ugyanazokat a számokat látjuk, az átvételnél nem lesz félreértés, és ez neked is megkönnyíti az eladást.</p>' +
@@ -489,6 +492,10 @@
       '<div id="msg"></div>' +
       '<button type="button" class="btn" id="start">Rendben, kezdjük</button>');
     on('start', begin);
+    var demoButtons = app.querySelectorAll('[data-demo]');
+    for (var d = 0; d < demoButtons.length; d++) {
+      demoButtons[d].addEventListener('click', function () { jumpDemo(this.getAttribute('data-demo')); });
+    }
     $('code').addEventListener('keydown', function (event) { if (event.key === 'Enter' || event.keyCode === 13) begin(); });
     $('code').addEventListener('input', function () {
       var digits = this.value.replace(/\D/g, '');
@@ -864,19 +871,33 @@
       if (status === 'skipped' && !detail) { hwNext(); return; }
       hwResult('touch');
     }
+    var cellEls = overlay.getElementsByTagName('td'), note = document.getElementById('touch-note');
+    // A mezőt a koordinátából számoljuk, mert az elementFromPoint régi Safarin egy táblázat fölött nem megbízható.
+    function cellAt(x, y) {
+      var grid = document.getElementById('touch-grid');
+      if (!grid) return -1;
+      var box = grid.getBoundingClientRect();
+      if (!box.width || !box.height) return -1;
+      var col = Math.floor((x - box.left) * cols / box.width), row = Math.floor((y - box.top) * rows / box.height);
+      if (col < 0 || col >= cols || row < 0 || row >= rows) return -1;
+      return row * cols + col;
+    }
     function mark(event) {
+      // A Kihagyom gomb érintését nem nyeljük el, különben nem kattintható.
+      if (event.target && event.target.id === 'touch-skip') return;
       event.preventDefault();
-      if (!event.isTrusted) return;
-      var fingers = event.touches.length;
+      // Csak a kifejezetten szkriptből küldött esemény számít hamisnak. A Safari 9 az isTrusted értéket nem adja meg (undefined).
+      if (event.isTrusted === false) return;
+      var touches = event.touches || [], fingers = touches.length;
       tracker.hit(-1, fingers);
       for (var t = 0; t < fingers; t++) {
-        var el = document.elementFromPoint(event.touches[t].clientX, event.touches[t].clientY);
-        var i = el && el.getAttribute ? el.getAttribute('data-i') : null;
-        if (i !== null) { el.className = 'on'; tracker.hit(parseInt(i, 10), fingers); }
+        var i = cellAt(touches[t].clientX, touches[t].clientY);
+        if (i >= 0 && cellEls[i]) { cellEls[i].className = 'on'; tracker.hit(i, fingers); }
       }
       var st = tracker.state();
       if (st.complete) finish('ok', 'mind a ' + st.total + ' mező érzékelt, két ujjal is');
-      else if (st.cells === st.total) document.getElementById('touch-note').textContent = 'Most tegyél egyszerre két ujjat a kijelzőre';
+      else if (st.cells === st.total) note.textContent = 'Most tegyél egyszerre két ujjat a kijelzőre';
+      else note.textContent = 'Érzékelt mezők: ' + st.cells + ' / ' + st.total + '. Húzd végig az ujjad minden mezőn';
     }
     overlay.addEventListener('touchstart', mark, false);
     overlay.addEventListener('touchmove', mark, false);
@@ -934,7 +955,7 @@
 
   SCREENS.hw_audio = function () {
     var ok = hwScreen('audio', 'Húzd ki a fülhallgatót, és vedd fel a hangerőt legalább a felére. Az oldal hangjelzéseket játszik le a hangszórón, és a mikrofon próbálja meghallani őket. Légy csendben közben.', '',
-      audioSupported(), 'ezen a rendszeren a böngésző nem engedi a mikrofon használatát (iOS 11 vagy újabb kell), USB-s programmal ellenőrizhető');
+      audioSupported(), 'ezen a rendszeren a böngésző nem engedi a mikrofon használatát (iOS 11 vagy újabb kell), ezért ezt nem tudtuk ellenőrizni');
     if (ok) on('hw-start', startAudio);
   };
 
@@ -1026,7 +1047,7 @@
   function cameraScreen(name, facing, lead) {
     return function () {
       var ok = hwScreen(name, lead, '<div id="preview"></div>', cameraSupported(),
-        'ezen a rendszeren a böngésző nem engedi a kamera használatát (iOS 11 vagy újabb kell), USB-s programmal ellenőrizhető');
+        'ezen a rendszeren a böngésző nem engedi a kamera használatát (iOS 11 vagy újabb kell), ezért ezt nem tudtuk ellenőrizni');
       if (ok) on('hw-start', function () { startCamera(name, facing); });
     };
   }
@@ -1103,26 +1124,27 @@
 
   SCREENS.details = function () {
     var v = state.vals, mac = state.kind === 'mac', cur = current();
+    var seen = '', known = '', rows = [['Modell', v.model], ['Tárhely', v.storage], ['Rendszerverzió', v.os], ['Sorozatszám', v.serial]], list = '';
+    for (var r = 0; r < rows.length; r++) { if (rows[r][1]) list += '<dt>' + rows[r][0] + '</dt><dd>' + esc(rows[r][1]) + '</dd>'; }
+    if (list) known = '<div class="result"><dl>' + list + '</dl></div>';
+    if (!mac && DEVICE && state.route !== 'usb') {
+      var scr = window.screen ? (window.screen.width + '×' + window.screen.height) : '';
+      seen = '<div class="note"><b>A böngészőből már kiolvastuk:</b> ' + esc(DEVICE.device) + ', ' + esc(DEVICE.name) + ' ' + esc(DEVICE.version) + (scr ? ', kijelző ' + esc(scr) : '') + '.' +
+        '<br>A pontos modellt, a tárhelyet és a sorozatszámot a böngésző nem látja. Ezeket nem kell beírnod: az USB-s program olvassa ki, ha a végén azt választod.</div>';
+    }
     show(top() + progress(3) +
       '<h1>Az eszköz adatai</h1>' +
-      '<p class="lead">Ezeket egyszer kérjük, hogy a vásárló össze tudja vetni a hirdetéssel. Ami előre ki van töltve, azt az előző lépésben olvastuk ki. Javíthatod.</p>' +
-      textField('f-model', 'Modell', v.model, mac ? 'Például: MacBook Air' : 'Például: iPad Air (4. generáció)',
-        (mac ? 'Apple menü &gt; Erről a Macről.' : cur.model) + ' Ne írj ide személyes adatot.', 60) +
-      textField('f-storage', 'Tárhely', v.storage, 'Például: 64 GB', mac ? 'Apple menü &gt; Erről a Macről.' : 'A Névjegy oldalon, a Kapacitás sorban.', 20) +
-      textField('f-os', 'Rendszerverzió', v.os, mac ? 'Például: 14.5' : 'Például: 17.4', mac ? 'Apple menü &gt; Erről a Macről.' : cur.version, 60) +
-      textField('f-serial', 'Sorozatszám', v.serial, 'Például: C02XXXXXXXXX',
-        mac ? 'Apple menü &gt; Erről a Macről.' : 'Beállítások &gt; Általános &gt; Névjegy &gt; Sorozatszám. Hosszan nyomva másolhatod.', 20,
-        ' autocapitalize="characters"') +
-      '<div class="note">A sorozatszámot elküldjük a vásárlónak, hogy az Apple lefedettség-ellenőrzőjén megnézhesse a modellt. Ha ezt nem szeretnéd, vedd ki a pipát: akkor <b>csak egy lenyomatot</b> küldünk, egy kódot, amiből a sorozatszám nem fejthető vissza, és az utolsó 4 karakterét.</div>' +
-      '<label class="check"><input type="checkbox" id="share"' + (state.shareSerial ? ' checked' : '') + '> A sorozatszámot elküldöm a vásárlónak, hogy ellenőrizhesse az Apple-nél a modellt.</label>' +
+      '<p class="lead">Ezek segítenek a vásárlónak összevetni az eszközt a hirdetéssel. Amit az oldal ki tudott olvasni, azt itt látod.</p>' + seen +
+      known +
+      (v.serial ? '<div class="note">A sorozatszámot elküldjük a vásárlónak, hogy az Apple lefedettség-ellenőrzőjén megnézhesse a modellt. Ha ezt nem szeretnéd, vedd ki a pipát: akkor <b>csak egy lenyomatot</b> küldünk, egy kódot, amiből a sorozatszám nem fejthető vissza, és az utolsó 4 karakterét.</div>' +
+        '<label class="check"><input type="checkbox" id="share"' + (state.shareSerial ? ' checked' : '') + '> A sorozatszámot elküldöm a vásárlónak, hogy ellenőrizhesse az Apple-nél a modellt.</label>' : '') +
       '<h2>Ki vagy jelentkezve az Apple-fiókodból?</h2>' +
       '<p class="muted">Ha az eszköz még a te Apple-fiókodhoz van kötve (Aktiválási zár), az új tulajdonos nem tudja használni. Kijelentkezés: ' + (mac ? 'Apple menü &gt; Rendszerbeállítások, legfelül a neved, majd Kijelentkezés.' : cur.signout) + '</p>' +
       '<label class="radio"><input type="radio" name="apple" value="yes"' + (state.apple === 'yes' ? ' checked' : '') + '> Kijelentkeztem, és a Keresés funkció ki van kapcsolva</label>' +
       '<label class="radio"><input type="radio" name="apple" value="no"' + (state.apple === 'no' ? ' checked' : '') + '> Még nem jelentkeztem ki</label>' +
       '<label class="radio"><input type="radio" name="apple" value="unsure"' + (state.apple === 'unsure' ? ' checked' : '') + '> Nem vagyok biztos benne</label>' +
       '<div id="msg"></div>' + foot('next', 'Tovább'));
-    bindInput('f-model', 'model'); bindInput('f-storage', 'storage'); bindInput('f-os', 'os'); bindInput('f-serial', 'serial');
-    $('share').addEventListener('change', function () { state.shareSerial = this.checked; });
+    if ($('share')) $('share').addEventListener('change', function () { state.shareSerial = this.checked; });
     var radios = app.querySelectorAll('input[name=apple]');
     for (var i = 0; i < radios.length; i++) radios[i].addEventListener('change', function () { state.apple = this.value; });
     on('next', function () {
@@ -1267,15 +1289,182 @@
     show(html);
   };
 
+  /* ---------- próbaüzem: ugrás bármelyik képernyőre és állapotra (csak #DEMO címen él) ---------- */
+
+  var DEMO_ENVS = {
+    ipad9: { device: { device: 'iPad', major: 9, version: '9.3.5', name: 'iOS' } },
+    ipad12: { device: { device: 'iPad', major: 12, version: '12.5.7', name: 'iOS' } },
+    ipad14: { device: { device: 'iPad', major: 14, version: '14.8', name: 'iOS' } },
+    ipad17: { device: { device: 'iPad', major: 17, version: '17.4', name: 'iPadOS' } },
+    win: { os: 'windows' }, macpc: { os: 'mac' }, linux: { os: 'linux' }
+  };
+  var USB_V = { model: 'iPad mini 1', storage: '16 GB', os: '9.3.5', serial: 'DMPS00000FAK', cycles: '245', capacity: '85' };
+  var MAC_V = { model: 'MacBook Air', chip: 'Apple M1', memory: '8 GB', storage: '256 GB', os: '14.5', serial: 'C02XYZ123456', cycles: '212', capacity: '91' };
+  var MAC_E = { condition: 'Normal', modelId: 'MacBookAir10,1', activationLock: 'Disabled', dep: false, mdm: false };
+  var DEMO_VALS = {
+    none: { v: {}, e: {} },
+    log: { v: { cycles: '245' }, e: { fileDate: '2026-11-09' } },
+    logweak: { v: { cycles: '1180' }, e: { fileDate: '2026-11-09' } },
+    entered: { v: { cycles: '312', capacity: '88' }, e: {} },
+    file: { v: { cycles: '312', capacity: '88' }, e: { fileDate: '2026-11-09' } },
+    usb: { v: USB_V, e: { modelId: 'iPad2,5', activationLock: 'Disabled' } },
+    usblock: { v: USB_V, e: { modelId: 'iPad2,5', activationLock: 'Enabled' } },
+    usbweak: { v: { model: 'iPad mini 1', storage: '16 GB', os: '9.3.5', serial: 'DMPS00000FAK', cycles: '1100', capacity: '70' }, e: { modelId: 'iPad2,5', activationLock: 'Disabled' } },
+    mac: { v: MAC_V, e: MAC_E },
+    macmdm: { v: MAC_V, e: { condition: 'Service Recommended', modelId: 'MacBookAir10,1', activationLock: 'Enabled', dep: true, mdm: true } }
+  };
+  var DEMO_LIST = [];
+  function demo(group, id, title, o) { DEMO_LIST.push({ group: group, id: id, title: title, o: o }); }
+
+  function demoHw(kind, mode) {
+    var out = {}, list = HW_FLOW[kind === 'mac' ? 'mac' : 'ios'], i, name;
+    if (mode === 'none') return out;
+    var good = { touch: 'minden mező érzékelve, két ujj is', motion: 'mért mozgás: 12 és 10 m/s² tartomány, 55 °/s forgás',
+      audio: 'a hangszóró és a mikrofon rendben, a mikrofon meghallotta a hangjelzéseket', camera_rear: 'élő kép érkezik',
+      camera_front: 'élő kép érkezik', display: 'az eladó nem látott hibát' };
+    var bad = { touch: ['ok', good.touch], motion: ['bad', 'nem érkezett mozgásadat az érzékelőtől'], audio: ['bad', 'a mikrofon nem hallotta a hangszórót'],
+      camera_rear: ['bad', 'csak fekete vagy egyszínű kép érkezett'], camera_front: ['ok', good.camera_front], display: ['bad', 'az eladó hibát látott a kijelzőn'] };
+    var legacy = { touch: ['ok', good.touch], motion: ['ok', good.motion], display: ['ok', good.display] };
+    for (i = 0; i < list.length; i++) {
+      name = list[i];
+      if (mode === 'ok') out[name] = { status: 'ok', detail: good[name] };
+      else if (mode === 'bad') out[name] = { status: bad[name][0], detail: bad[name][1] };
+      else if (mode === 'legacy') {
+        out[name] = legacy[name] ? { status: legacy[name][0], detail: legacy[name][1] }
+          : { status: 'unavailable', detail: 'ezen a rendszeren a böngésző nem engedi a használatát (iOS 11 vagy újabb kell), ezért ezt nem tudtuk ellenőrizni' };
+      }
+    }
+    return out;
+  }
+
+  function applyDemo(spec) {
+    var o = spec.o, env = DEMO_ENVS[o.env] || DEMO_ENVS.ipad9, preset = DEMO_VALS[o.vals || 'none'], key;
+    DEVICE = env.device || null; ON_COMPUTER = !DEVICE; FORCE_OS = env.os || '';
+    state.sent = false; state.sending = false; state.sid = ''; state.demoSections = null;
+    state.kind = o.kind || 'ios';
+    state.osFamily = o.fam || (DEVICE ? familyOf(DEVICE.major) : 'latest');
+    state.detectedOs = DEVICE ? DEVICE.version : '';
+    state.vals = { model: '', storage: '', os: '', memory: '', chip: '', serial: '', cycles: '', capacity: '' };
+    for (key in preset.v) { if (Object.prototype.hasOwnProperty.call(preset.v, key)) state.vals[key] = preset.v[key]; }
+    if (DEVICE && !state.vals.os) state.vals.os = DEVICE.version;
+    state.route = o.route || '';
+    state.parsed = {};
+    if (state.route) { for (key in preset.v) { if (Object.prototype.hasOwnProperty.call(preset.v, key)) state.parsed[key] = preset.v[key]; } }
+    state.extra = { condition: '', fileDate: '', activationLock: '', dep: null, mdm: null, modelId: '' };
+    for (key in preset.e) { if (Object.prototype.hasOwnProperty.call(preset.e, key)) state.extra[key] = preset.e[key]; }
+    state.apple = o.apple === undefined ? 'yes' : o.apple;
+    state.shareSerial = true;
+    state.noLog = !!o.noLog;
+    state.hw = demoHw(state.kind, o.hw || 'none');
+    state.hwSkipped = o.hw === 'none' && !!o.hwSkipped;
+    state.path = ['welcome']; state.idx = 0; state.step = 'welcome';
+    try { history.replaceState({ idx: 0 }, ''); } catch (e) { /* nem baj */ }
+    if (o.screen === 'done') { done(P.buildSections(collect())); return; }
+    go(o.screen);
+  }
+
+  function jumpDemo(id) {
+    for (var i = 0; i < DEMO_LIST.length; i++) { if (DEMO_LIST[i].id === id) { applyDemo(DEMO_LIST[i]); return true; } }
+    return false;
+  }
+
+  function demoPanel() {
+    var html = '<div class="demo-panel"><h2>Próbaüzem: ugrás bármelyik képernyőre</h2>' +
+      '<p class="muted">Egy kattintás beállítja az eszközt, a rendszert és az adatokat, és a kiválasztott képernyőre visz. A Vissza ide hoz. Közvetlen cím: a #DEMO után egy kötőjel és az azonosító, például <b>#DEMO-ios9-review-log</b>. Ez csak a #DEMO címen létezik.</p>', group = '', i;
+    for (i = 0; i < DEMO_LIST.length; i++) {
+      var item = DEMO_LIST[i];
+      if (item.group !== group) {
+        if (group) html += '</div>';
+        html += '<h3>' + esc(item.group) + '</h3><div class="demo-list">';
+        group = item.group;
+      }
+      html += '<button type="button" class="demo-btn" data-demo="' + esc(item.id) + '">' + esc(item.title) + '<small>#DEMO-' + esc(item.id) + '</small></button>';
+    }
+    return html + '</div></div>';
+  }
+
+  var G_OPEN = 'Nyitás';
+  demo(G_OPEN, 'kind', 'Milyen eszközt adsz el?', { env: 'ipad9', kind: '', screen: 'kind' });
+
+  var G9 = 'iPad, iOS 9 és 10';
+  demo(G9, 'ios9-log-ask', 'Rendszernapló keresése', { env: 'ipad9', screen: 'log_ask' });
+  demo(G9, 'ios9-log-paste', 'Napló beillesztése', { env: 'ipad9', screen: 'log_paste' });
+  demo(G9, 'ios9-nolog', 'Nincs napló bejegyzés', { env: 'ipad9', screen: 'nolog' });
+  demo(G9, 'ios9-details-nodata', 'Az eszköz adatai, még nincs akku adat', { env: 'ipad9', apple: '', screen: 'details' });
+  demo(G9, 'ios9-details-log', 'Az eszköz adatai, napló beolvasva', { env: 'ipad9', vals: 'log', route: 'file', apple: '', screen: 'details' });
+  demo(G9, 'ios9-hw-intro', 'Hardverteszt bevezető', { env: 'ipad9', screen: 'hw_intro' });
+  demo(G9, 'ios9-hw-touch', 'Érintőképernyő teszt', { env: 'ipad9', screen: 'hw_touch' });
+  demo(G9, 'ios9-hw-motion', 'Mozgásérzékelő teszt', { env: 'ipad9', screen: 'hw_motion' });
+  demo(G9, 'ios9-hw-audio', 'Hang és mikrofon (iOS 9-en nem ellenőrizhető)', { env: 'ipad9', screen: 'hw_audio' });
+  demo(G9, 'ios9-hw-camera-rear', 'Hátlapi kamera (iOS 9-en nem ellenőrizhető)', { env: 'ipad9', screen: 'hw_camera_rear' });
+  demo(G9, 'ios9-hw-camera-front', 'Előlapi kamera (iOS 9-en nem ellenőrizhető)', { env: 'ipad9', screen: 'hw_camera_front' });
+  demo(G9, 'ios9-hw-display', 'Kijelző színei', { env: 'ipad9', screen: 'hw_display' });
+  demo(G9, 'ios9-remaining-nolog', 'Mi maradt, akku adat nélkül', { env: 'ipad9', noLog: true, hw: 'legacy', screen: 'remaining' });
+  demo(G9, 'ios9-remaining-log', 'Mi maradt, napló beolvasva', { env: 'ipad9', vals: 'log', route: 'file', hw: 'legacy', screen: 'remaining' });
+  demo(G9, 'ios9-usb-about', 'Mit csinál az USB-s program', { env: 'ipad9', screen: 'usb_about' });
+  demo(G9, 'ios9-usb-switch', 'Nyisd meg a számítógépeden', { env: 'ipad9', screen: 'usb_switch' });
+  demo(G9, 'ios9-review-nolog', 'Előnézet: akku adat nélkül, hardverteszt kihagyva', { env: 'ipad9', noLog: true, hw: 'none', hwSkipped: true, screen: 'review' });
+  demo(G9, 'ios9-review-log', 'Előnézet: napló, hardverteszt iOS 9 szerint', { env: 'ipad9', vals: 'log', route: 'file', hw: 'legacy', screen: 'review' });
+  demo(G9, 'ios9-review-weak', 'Előnézet: kopott akku, hibás tesztek', { env: 'ipad9', vals: 'logweak', route: 'file', hw: 'bad', apple: 'no', screen: 'review' });
+  demo(G9, 'ios9-done', 'Köszönjük (a küldés után)', { env: 'ipad9', vals: 'log', route: 'file', hw: 'legacy', screen: 'done' });
+
+  var G12 = 'iPad, iOS 11 és 12';
+  demo(G12, 'mid-screen-ask', 'Látod az akku állapotát a Beállításokban?', { env: 'ipad12', screen: 'screen_ask' });
+  demo(G12, 'mid-screen-enter', 'Akku értékek beírása', { env: 'ipad12', screen: 'screen_enter' });
+  demo(G12, 'mid-log-ask', 'Rendszernapló keresése', { env: 'ipad12', screen: 'log_ask' });
+  demo(G12, 'mid-log-paste', 'Napló beillesztése', { env: 'ipad12', screen: 'log_paste' });
+  demo(G12, 'mid-hw-audio', 'Hang és mikrofon teszt', { env: 'ipad12', screen: 'hw_audio' });
+  demo(G12, 'mid-hw-camera-rear', 'Hátlapi kamera teszt', { env: 'ipad12', screen: 'hw_camera_rear' });
+  demo(G12, 'mid-review', 'Előnézet: beírt akku, minden teszt rendben', { env: 'ipad12', vals: 'entered', hw: 'ok', screen: 'review' });
+
+  var G14 = 'iPad, iPadOS 13 és 14';
+  demo(G14, 'modern-screen-ask', 'Látod az akku állapotát a Beállításokban?', { env: 'ipad14', screen: 'screen_ask' });
+  demo(G14, 'modern-screen-enter', 'Akku értékek beírása', { env: 'ipad14', screen: 'screen_enter' });
+  demo(G14, 'modern-log-ask', 'Analitikai fájl keresése', { env: 'ipad14', screen: 'log_ask' });
+  demo(G14, 'modern-log-file', 'Fájl kiválasztása', { env: 'ipad14', screen: 'log_file' });
+  demo(G14, 'modern-review', 'Előnézet: fájlból, minden teszt rendben', { env: 'ipad14', vals: 'file', route: 'file', hw: 'ok', screen: 'review' });
+
+  var G17 = 'iPad, iPadOS 15 és újabb';
+  demo(G17, 'latest-screen-ask', 'Látod az akku állapotát a Beállításokban?', { env: 'ipad17', screen: 'screen_ask' });
+  demo(G17, 'latest-log-file', 'Fájl kiválasztása', { env: 'ipad17', screen: 'log_file' });
+  demo(G17, 'latest-hw-audio', 'Hang és mikrofon teszt', { env: 'ipad17', screen: 'hw_audio' });
+  demo(G17, 'latest-remaining', 'Mi maradt, minden teszt rendben', { env: 'ipad17', vals: 'file', route: 'file', hw: 'ok', screen: 'remaining' });
+  demo(G17, 'latest-review-ok', 'Előnézet: minden rendben', { env: 'ipad17', vals: 'file', route: 'file', hw: 'ok', screen: 'review' });
+  demo(G17, 'latest-review-bad', 'Előnézet: hibás tesztek, kijelentkezés nélkül', { env: 'ipad17', vals: 'file', route: 'file', hw: 'bad', apple: 'no', screen: 'review' });
+
+  var GPC = 'Számítógép, USB-s kiolvasás (iPad vagy iPhone)';
+  demo(GPC, 'pc-win-get', 'Letöltés: Windows', { env: 'win', screen: 'usb_get' });
+  demo(GPC, 'pc-mac-get', 'Letöltés: Mac', { env: 'macpc', screen: 'usb_get' });
+  demo(GPC, 'pc-linux-get', 'Letöltés: Linux', { env: 'linux', screen: 'usb_get' });
+  demo(GPC, 'pc-run', 'Csatlakoztatás és futtatás', { env: 'win', screen: 'usb_run' });
+  demo(GPC, 'pc-paste', 'A kimenet beillesztése', { env: 'win', screen: 'usb_paste' });
+  demo(GPC, 'pc-details', 'Az eszköz adatai, USB-ből kitöltve', { env: 'win', vals: 'usb', route: 'usb', apple: '', screen: 'details' });
+  demo(GPC, 'pc-review', 'Előnézet: USB-s adatok, Aktiválási zár kikapcsolva', { env: 'win', vals: 'usb', route: 'usb', screen: 'review' });
+  demo(GPC, 'pc-review-lock', 'Előnézet: Aktiválási zár BEKAPCSOLVA', { env: 'win', vals: 'usblock', route: 'usb', apple: 'no', screen: 'review' });
+  demo(GPC, 'pc-review-weak', 'Előnézet: kopott akku', { env: 'win', vals: 'usbweak', route: 'usb', screen: 'review' });
+  demo(GPC, 'pc-done', 'Köszönjük (a küldés után)', { env: 'win', vals: 'usb', route: 'usb', screen: 'done' });
+
+  var GMAC = 'Mac eladása';
+  demo(GMAC, 'mac-run', 'Terminál-parancs futtatása', { env: 'macpc', kind: 'mac', screen: 'mac_run' });
+  demo(GMAC, 'mac-paste', 'A kimenet beillesztése', { env: 'macpc', kind: 'mac', screen: 'mac_paste' });
+  demo(GMAC, 'mac-manual', 'Kézi megadás (ha a parancs nem megy)', { env: 'macpc', kind: 'mac', screen: 'mac_manual' });
+  demo(GMAC, 'mac-details', 'Az eszköz adatai, parancsból kitöltve', { env: 'macpc', kind: 'mac', vals: 'mac', route: 'command', apple: '', screen: 'details' });
+  demo(GMAC, 'mac-hw-intro', 'Hardverteszt bevezető', { env: 'macpc', kind: 'mac', vals: 'mac', route: 'command', screen: 'hw_intro' });
+  demo(GMAC, 'mac-hw-audio', 'Hang és mikrofon teszt', { env: 'macpc', kind: 'mac', screen: 'hw_audio' });
+  demo(GMAC, 'mac-review-ok', 'Előnézet: minden rendben', { env: 'macpc', kind: 'mac', vals: 'mac', route: 'command', hw: 'ok', screen: 'review' });
+  demo(GMAC, 'mac-review-mdm', 'Előnézet: céges felügyelet, zár bekapcsolva, hibás tesztek', { env: 'macpc', kind: 'mac', vals: 'macmdm', route: 'command', hw: 'bad', apple: 'no', screen: 'review' });
+  demo(GMAC, 'mac-review-nohw', 'Előnézet: hardverteszt kihagyva', { env: 'macpc', kind: 'mac', vals: 'mac', route: 'command', hw: 'none', hwSkipped: true, screen: 'review' });
+  demo(GMAC, 'mac-done', 'Köszönjük (a küldés után)', { env: 'macpc', kind: 'mac', vals: 'mac', route: 'command', hw: 'ok', screen: 'done' });
+
   /* ---------- indítás ---------- */
 
   var detected = DEVICE;
-  var restored = restore();
+  var restored = DEMO_ID ? false : restore();
   if (!restored) { state.path = ['welcome']; state.idx = 0; state.step = 'welcome'; }
   if (detected) state.detectedOs = detected.version;
   if (!state.osFamily) state.osFamily = detected ? familyOf(detected.major) : 'latest';
   if (detected && !state.vals.os) state.vals.os = detected.version;
   try { history.replaceState({ idx: state.idx }, ''); } catch (e) { /* nem baj */ }
   window.addEventListener('popstate', onPop);
-  render();
+  if (DEMO && DEMO_ID && jumpDemo(DEMO_ID)) { /* a mélylink a kért képernyőre vitt */ } else { render(); }
 })();

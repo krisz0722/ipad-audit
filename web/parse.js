@@ -216,14 +216,16 @@
   // A riport szakaszai a Code.gs finish_ műveletének formátumában.
   function buildSections(d) {
     var src = d.sources || {};
-    function row(label, value, status, tag) {
+    function row(label, value, status, tag, missing) {
       var has = !(value === null || value === undefined || value === '');
-      return { label: label, value: has ? String(value) : 'nem adta meg', status: has ? (status || 'info') : 'nodata', tag: has ? (tag || '') : '' };
+      return { label: label, value: has ? String(value) : (missing || 'nem adta meg'), status: has ? (status || 'info') : 'nodata', tag: has ? (tag || '') : '' };
     }
+    // iPaden és iPhone-on ezeket a böngésző nem látja, csak az USB-s program olvassa ki. Ezt nem az eladó mulasztja el.
+    var noUsb = d.kind === 'mac' ? '' : 'USB nélkül nem olvasható ki';
     var device = [
       row('Típus', d.kind === 'mac' ? 'Mac' : 'iPad / iPhone', 'info', 'választotta'),
-      row('Modell', d.model ? d.model + (d.modelId ? ' (' + d.modelId + ')' : '') : '', 'info', src.model),
-      row('Tárhely', d.storage, 'info', src.storage),
+      row('Modell', d.model ? d.model + (d.modelId ? ' (' + d.modelId + ')' : '') : '', 'info', src.model, noUsb),
+      row('Tárhely', d.storage, 'info', src.storage, noUsb),
       row('Rendszerverzió', d.os, 'info', src.os)
     ];
     // A chip és a memória csak Macnél értelmes, iPaden és iPhone-on soha nem kérjük.
@@ -233,8 +235,8 @@
     if (d.serialRaw) {
       device.push(row('Sorozatszám', d.serialRaw, 'info', 'az eladó jóváhagyta'));
     } else {
-      device.push(row('Sorozatszám lenyomat', d.fingerprint, 'info', 'a meghívókóddal kulcsolt SHA-256, első 16 karakter'));
-      device.push(row('Sorozatszám vége', d.serialTail, 'info', src.serial));
+      device.push(row('Sorozatszám lenyomat', d.fingerprint, 'info', 'a meghívókóddal kulcsolt SHA-256, első 16 karakter', noUsb));
+      device.push(row('Sorozatszám vége', d.serialTail, 'info', src.serial, noUsb));
     }
 
     var deferText = (d.batteryDefer && d.cycles === null && d.capacity === null) ? 'nincs napló, USB-s méréssel pótlandó (az eladó számítógépén)' : '';
