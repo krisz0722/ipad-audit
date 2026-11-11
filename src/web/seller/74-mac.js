@@ -43,10 +43,10 @@
       '<ol class="steps">' +
         '<li>Jelöld ki a Terminál teljes szövegét (<b>Cmd + A</b>), és másold ki (<b>Cmd + C</b>).</li>' +
         '<li>Illeszd be ide, és koppints a Beolvasás gombra:' +
-          '<label class="field"><textarea id="paste" placeholder="Ide illeszd be a Terminál szövegét" spellcheck="false"></textarea></label>' +
+          '<label class="field"><textarea id="paste" placeholder="Ide illeszd be a Terminál szövegét" spellcheck="false">' + demoFill('mac') + '</textarea></label>' +
           '<button type="button" class="btn small" id="parse">Beolvasás</button></li>' +
       '</ol>' +
-      '<div id="result"></div>' + foot());
+      demoNote() + '<div id="result"></div>' + foot());
     on('parse', parseMac);
   };
 

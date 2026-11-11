@@ -252,6 +252,8 @@ Az alábbi forgatókönyvek mind lefutnak (`npm run e2e`), a fájljaik: [tests/e
 
 A `#DEMO` cím után egy kötőjellel és az azonosítóval közvetlenül az adott állapotra lehet ugrani, például `#DEMO-ios9-review-log`. Ezek csak a `#DEMO` címen léteznek.
 
+Próbaüzemben semmit nem kell futtatni: a beillesztős mezők (az USB-s program kimenete, a Mac Terminál szövege, az iOS napló) egy kitalált minta kimenettel előre ki vannak töltve, a fájlválasztós képernyőn pedig egy Minta fájl használata gomb van. A Beolvasás a valódi parseren megy át. Valódi meghívókóddal a mezők üresek, ezt teszt őrzi.
+
 **Nyitás**
 
 | Mélylink | Képernyő |

@@ -252,6 +252,8 @@ All the flows below run (`npm run e2e`). Their files are [tests/e2e/flows.spec.j
 
 Appending a hyphen and the id to `#DEMO` jumps straight to that state, for example `#DEMO-ios9-review-log`. These exist only on the `#DEMO` address. The screen titles are the Hungarian names shown in the app.
 
+In demo mode nothing has to be run: the paste fields (the USB reader output, the Mac Terminal text, the iOS log) are prefilled with a made-up sample output, and the file picker screen has a "use sample file" button. Reading goes through the real parser. With a real invite code the fields stay empty, a test guards this.
+
 **Opening**
 
 | Deep link | Screen |

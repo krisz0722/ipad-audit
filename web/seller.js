@@ -626,10 +626,10 @@
     show(top() + progress(2) +
       '<h1>A kimenet beillesztése</h1>' +
       '<p>Illeszd be a program kimenetét, és koppints a Beolvasás gombra:</p>' +
-      '<label class="field"><textarea id="usb-paste" placeholder="Ide illeszd be a program kimenetét" spellcheck="false"></textarea></label>' +
+      '<label class="field"><textarea id="usb-paste" placeholder="Ide illeszd be a program kimenetét" spellcheck="false">' + demoFill('usb') + '</textarea></label>' +
       '<button type="button" class="btn small" id="parse-usb">Beolvasás</button>' +
       '<div class="note">A beillesztett szöveget a beolvasás után töröljük a mezőből. Csak a modellt, a rendszerverziót, a tárhelyet, a sorozatszámot, az akkumulátor adatait és az Aktiválási zár állapotát vesszük ki belőle.</div>' +
-      '<div id="result"></div>' + foot());
+      demoNote() + '<div id="result"></div>' + foot());
     on('parse-usb', function () {
       var area = $('usb-paste');
       applyUsbText(area ? area.value : '');
@@ -709,11 +709,11 @@
       '<ol class="steps">' +
         '<li>Nyisd meg a legfrissebb bejegyzést, érintsd meg hosszan a szöveget, válaszd a <b>Mindet kijelöl</b> (Select All), majd a <b>Másolás</b> (Copy) lehetőséget.</li>' +
         '<li>Térj vissza ide, érintsd meg hosszan az alábbi mezőt, válaszd a <b>Beillesztés</b> (Paste) lehetőséget, majd koppints a Beolvasás gombra:' +
-          '<label class="field"><textarea id="paste" placeholder="Ide illeszd be a napló szövegét" spellcheck="false"></textarea></label>' +
+          '<label class="field"><textarea id="paste" placeholder="Ide illeszd be a napló szövegét" spellcheck="false">' + demoFill('log') + '</textarea></label>' +
           '<button type="button" class="btn small" id="parse-log">Beolvasás</button></li>' +
       '</ol>' +
       '<div class="note">A beillesztett szöveget a beolvasás után töröljük a mezőből. Belőle kizárólag a ciklusszámot, a kapacitást, a rendszerverziót és a napló dátumát vesszük ki. Ha más adat is van benne (például alkalmazások nevei), azt nem olvassuk ki és nem küldjük el.</div>' +
-      '<div id="result"></div>' + foot());
+      demoNote() + '<div id="result"></div>' + foot());
     on('parse-log', function () {
       var area = $('paste');
       applyIpadText(area ? area.value : '');
@@ -729,9 +729,11 @@
         '<li>Térj vissza ide, és válaszd ki a mentett fájlt:<br><input type="file" id="file"></li>' +
       '</ol>' +
       '<div class="note">A fájlból kizárólag a ciklusszámot, a kapacitást, a rendszerverziót és a fájl dátumát vesszük ki. Ha más adat is van benne (például alkalmazások nevei), azt nem olvassuk ki és nem küldjük el.</div>' +
+      (DEMO ? '<div class="note">Próbaüzem: fájl nélkül is kipróbálható egy kitalált minta fájllal. <button type="button" class="btn small" id="demo-file">Minta fájl használata</button></div>' : '') +
       '<div id="result"></div>' + foot());
     var file = $('file');
     if (file) file.addEventListener('change', onFile);
+    if (DEMO) on('demo-file', function () { applyIpadText(demoSample('file')); });
   };
 
   SCREENS.nolog = function () {
@@ -789,10 +791,10 @@
       '<ol class="steps">' +
         '<li>Jelöld ki a Terminál teljes szövegét (<b>Cmd + A</b>), és másold ki (<b>Cmd + C</b>).</li>' +
         '<li>Illeszd be ide, és koppints a Beolvasás gombra:' +
-          '<label class="field"><textarea id="paste" placeholder="Ide illeszd be a Terminál szövegét" spellcheck="false"></textarea></label>' +
+          '<label class="field"><textarea id="paste" placeholder="Ide illeszd be a Terminál szövegét" spellcheck="false">' + demoFill('mac') + '</textarea></label>' +
           '<button type="button" class="btn small" id="parse">Beolvasás</button></li>' +
       '</ol>' +
-      '<div id="result"></div>' + foot());
+      demoNote() + '<div id="result"></div>' + foot());
     on('parse', parseMac);
   };
 
@@ -1483,6 +1485,39 @@
     mac: { v: MAC_V, e: MAC_E },
     macmdm: { v: MAC_V, e: { condition: 'Service Recommended', modelId: 'MacBookAir10,1', activationLock: 'Enabled', dep: true, mdm: true } }
   };
+  /* próbaüzemben a beillesztős mezők kitalált minta kimenettel előre kitöltve, így semmit nem kell futtatni */
+  var DEMO_SAMPLES = {
+    usb: ['iPad akku-kiolvasó. Csak olvas, semmit nem küld el.', 'IPAD-AUDIT-USB 1', 'model: iPad2,5', 'model_name: iPad mini 1',
+      'os: 9.3.5', 'serial: DMPS00000FAK', 'storage_gb: 16', 'cycles: 245', 'design_capacity: 4490', 'max_capacity: 3820',
+      'capacity_percent: 85.1', 'activation_lock: off', 'END'],
+    file: ['{"bug_type":"211","os_version":"iPadOS 17.4 (21E219)","timestamp":"2026-11-09 18:00:00.00 +0100"}',
+      '{"message":{"Last_Value_CycleCount":312,"Last_Value_MaximumCapacityPercent":88},"name":"PowerlogBattery"}'],
+    mac: ['14.5',
+      '\t\t\t<key>activation_lock_status</key>', '\t\t\t<string>activation_lock_disabled</string>',
+      '\t\t\t<key>chip_type</key>', '\t\t\t<string>Apple M1</string>',
+      '\t\t\t<key>machine_model</key>', '\t\t\t<string>MacBookAir10,1</string>',
+      '\t\t\t<key>machine_name</key>', '\t\t\t<string>MacBook Air</string>',
+      '\t\t\t<key>physical_memory</key>', '\t\t\t<string>8 GB</string>',
+      '\t\t\t<key>serial_number</key>', '\t\t\t<string>C02XYZ123456</string>',
+      '\t\t\t<key>sppower_battery_cycle_count</key>', '\t\t\t<integer>212</integer>',
+      '\t\t\t<key>sppower_battery_health</key>', '\t\t\t<string>Normal</string>',
+      '\t\t\t<key>sppower_battery_health_maximum_capacity</key>', '\t\t\t<string>91%</string>',
+      'Enrolled via DEP: No', 'MDM enrollment: No',
+      '/dev/disk3s5  239000000  98000000  130000000    43%  1000  2000  1%   /System/Volumes/Data']
+  };
+  function demoSample(kind) {
+    if (kind === 'log') {
+      return '{"bug_type":"211","os_version":"iPhone OS ' + (DEVICE ? DEVICE.version : '9.3.5') + '","timestamp":"2026-11-09 18:00:00.00 +0100"}\n' +
+        '{"message":{"batterycyclecount":245}}';
+    }
+    return DEMO_SAMPLES[kind] ? DEMO_SAMPLES[kind].join('\n') : '';
+  }
+  /* a textarea kezdő tartalma: próbaüzemben a minta, élesben üres */
+  function demoFill(kind) { return DEMO ? esc(demoSample(kind)) : ''; }
+  function demoNote() {
+    return DEMO ? '<div class="note">Próbaüzem: a mezőben egy kitalált minta kimenet van, a Beolvasás gombbal kipróbálható. Valódi meghívókóddal a mező üres.</div>' : '';
+  }
+
   var DEMO_LIST = [];
   function demo(group, id, title, o) { DEMO_LIST.push({ group: group, id: id, title: title, o: o }); }
 

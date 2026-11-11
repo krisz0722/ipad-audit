@@ -84,10 +84,10 @@
     show(top() + progress(2) +
       '<h1>A kimenet beillesztése</h1>' +
       '<p>Illeszd be a program kimenetét, és koppints a Beolvasás gombra:</p>' +
-      '<label class="field"><textarea id="usb-paste" placeholder="Ide illeszd be a program kimenetét" spellcheck="false"></textarea></label>' +
+      '<label class="field"><textarea id="usb-paste" placeholder="Ide illeszd be a program kimenetét" spellcheck="false">' + demoFill('usb') + '</textarea></label>' +
       '<button type="button" class="btn small" id="parse-usb">Beolvasás</button>' +
       '<div class="note">A beillesztett szöveget a beolvasás után töröljük a mezőből. Csak a modellt, a rendszerverziót, a tárhelyet, a sorozatszámot, az akkumulátor adatait és az Aktiválási zár állapotát vesszük ki belőle.</div>' +
-      '<div id="result"></div>' + foot());
+      demoNote() + '<div id="result"></div>' + foot());
     on('parse-usb', function () {
       var area = $('usb-paste');
       applyUsbText(area ? area.value : '');

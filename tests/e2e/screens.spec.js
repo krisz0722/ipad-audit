@@ -36,3 +36,38 @@ test('screens: az összes demo képernyő képernyőképe', async ({ page }) => 
   }
   fs.writeFileSync(path.join(dir, 'screens.json'), JSON.stringify({ groups }, null, 2));
 });
+
+// Próbaüzemben a beillesztős képernyők kitalált minta kimenettel előre kitöltve, a Beolvasás a valódi parseren megy át.
+const PREFILLED = [
+  { id: 'pc-paste', area: '#usb-paste', button: '#parse-usb', expect: 'iPad mini 1', view: H.DESKTOP },
+  { id: 'mac-paste', area: '#paste', button: '#parse', expect: 'MacBook Air', view: H.DESKTOP },
+  { id: 'ios9-log-paste', area: '#paste', button: '#parse-log', expect: '245', view: H.IPAD },
+  { id: 'mid-log-paste', area: '#paste', button: '#parse-log', expect: '245', view: H.IPAD },
+  { id: 'modern-log-file', area: null, button: '#demo-file', expect: '312', view: H.IPAD }
+];
+for (const c of PREFILLED) {
+  test('demo minta: ' + c.id + ' futtatás nélkül beolvasható', async ({ page }) => {
+    await page.setViewportSize(c.view);
+    await page.goto('/#DEMO-' + c.id);
+    await page.reload();
+    if (c.area) expect((await page.locator(c.area).inputValue()).length).toBeGreaterThan(20);
+    await page.click(c.button);
+    await expect(page.locator('#result .result')).toContainText(c.expect);
+    if (c.area) expect(await page.locator(c.area).inputValue()).toBe('');
+    await expect(page.locator('#res-next')).toBeVisible();
+  });
+}
+
+test.describe('Valódi kóddal nincs minta', () => {
+  test.use({ userAgent: H.UA.mac, viewport: H.DESKTOP });
+  test('valódi kóddal a beillesztős mező üres, és nincs próbaüzem jelzés', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('#code').fill('123 456 789');
+    await page.locator('#start').click();
+    await page.locator('#k-mac').click();
+    await page.locator('#m-next').click();
+    await expect(page.locator('h1').first()).toHaveText('A Terminál szövegének beillesztése');
+    expect(await page.locator('#paste').inputValue()).toBe('');
+    await expect(page.locator('body')).not.toContainText('Próbaüzem');
+  });
+});

@@ -69,11 +69,11 @@
       '<ol class="steps">' +
         '<li>Nyisd meg a legfrissebb bejegyzést, érintsd meg hosszan a szöveget, válaszd a <b>Mindet kijelöl</b> (Select All), majd a <b>Másolás</b> (Copy) lehetőséget.</li>' +
         '<li>Térj vissza ide, érintsd meg hosszan az alábbi mezőt, válaszd a <b>Beillesztés</b> (Paste) lehetőséget, majd koppints a Beolvasás gombra:' +
-          '<label class="field"><textarea id="paste" placeholder="Ide illeszd be a napló szövegét" spellcheck="false"></textarea></label>' +
+          '<label class="field"><textarea id="paste" placeholder="Ide illeszd be a napló szövegét" spellcheck="false">' + demoFill('log') + '</textarea></label>' +
           '<button type="button" class="btn small" id="parse-log">Beolvasás</button></li>' +
       '</ol>' +
       '<div class="note">A beillesztett szöveget a beolvasás után töröljük a mezőből. Belőle kizárólag a ciklusszámot, a kapacitást, a rendszerverziót és a napló dátumát vesszük ki. Ha más adat is van benne (például alkalmazások nevei), azt nem olvassuk ki és nem küldjük el.</div>' +
-      '<div id="result"></div>' + foot());
+      demoNote() + '<div id="result"></div>' + foot());
     on('parse-log', function () {
       var area = $('paste');
       applyIpadText(area ? area.value : '');
@@ -89,9 +89,11 @@
         '<li>Térj vissza ide, és válaszd ki a mentett fájlt:<br><input type="file" id="file"></li>' +
       '</ol>' +
       '<div class="note">A fájlból kizárólag a ciklusszámot, a kapacitást, a rendszerverziót és a fájl dátumát vesszük ki. Ha más adat is van benne (például alkalmazások nevei), azt nem olvassuk ki és nem küldjük el.</div>' +
+      (DEMO ? '<div class="note">Próbaüzem: fájl nélkül is kipróbálható egy kitalált minta fájllal. <button type="button" class="btn small" id="demo-file">Minta fájl használata</button></div>' : '') +
       '<div id="result"></div>' + foot());
     var file = $('file');
     if (file) file.addEventListener('change', onFile);
+    if (DEMO) on('demo-file', function () { applyIpadText(demoSample('file')); });
   };
 
   SCREENS.nolog = function () {
