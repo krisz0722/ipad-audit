@@ -380,12 +380,70 @@ test.describe('Mac', () => {
     });
     await f.step('Tovább', () => page.locator('#res-next').click(), 'Az eszköz adatai');
     await details(page, f);
-    await f.step('Elkezdem a hardvertesztet', () => page.locator('#hw-go').click(), 'Hangszóró és mikrofon');
+    await f.step('Elkezdem a hardvertesztet', () => page.locator('#hw-go').click(), 'Billentyűzet');
+    await H.hwKeyboard(page, f, { fn: true });
+    await H.hwPointer(page, f);
     await H.hwMedia(page, f, 'run', 'Hang');
     await H.hwMedia(page, f, 'run', 'Előlapi kamera');
     await H.hwDisplay(page, f, 'ok');
     await review(page, f);
+    await expect(page.locator('#app')).toContainText('mind a 64 billentyű érzékelt');
     await sendDemo(page, f);
+    await f.save();
+  });
+
+  async function macToHardware(page, f) {
+    await H.begin(page, f, 'DEMO');
+    await f.step('Mac', () => page.locator('#k-mac').click(), 'A Mac adatai');
+    await f.step('Lefuttattam a parancsot', () => page.locator('#m-next').click(), 'A Terminál szövegének beillesztése');
+    await f.step('Kimenet beillesztése', async () => { await page.locator('#paste').fill(H.MAC); await page.locator('#parse').click(); await expect(page.locator('#result')).toContainText('MacBook Air'); });
+    await f.step('Tovább', () => page.locator('#res-next').click(), 'Az eszköz adatai');
+    await details(page, f);
+    await f.step('Elkezdem a hardvertesztet', () => page.locator('#hw-go').click(), 'Billentyűzet');
+  }
+
+  test('mac-keyboard-iso: ISO (magyar) kiosztás, a funkciósor nélkül', async ({ page }) => {
+    const f = new H.Flow(page, 'mac-keyboard-iso', 'Mac: ISO (európai, magyar) billentyűzet, a funkciósor nélkül', G.mac);
+    await macToHardware(page, f);
+    await H.hwKeyboard(page, f, { layout: 'iso', expect: 'mind a 65 billentyű érzékelt' });
+    await f.step('Egér és trackpad: kihagyom', () => page.locator('#hw-skip').click(), 'Hangszóró és mikrofon');
+    await f.save();
+  });
+
+  test('mac-keyboard-missing: hiányzó billentyűk, a teszt hibás', async ({ page }) => {
+    const f = new H.Flow(page, 'mac-keyboard-missing', 'Mac: két billentyű nem reagál (Q és fel nyíl), a teszt hibás', G.mac);
+    await macToHardware(page, f);
+    await H.hwKeyboard(page, f, { skip: ['KeyQ', 'ArrowUp'], expect: 'nem érzékelt: Q, ↑' });
+    await f.step('Egér és trackpad: kihagyom', () => page.locator('#hw-skip').click(), 'Hangszóró és mikrofon');
+    await f.save();
+  });
+
+  test('mac-keyboard-double: dupla leütés gyanú', async ({ page }) => {
+    const f = new H.Flow(page, 'mac-keyboard-double', 'Mac: az A billentyű egy nyomásra kétszer reagál (dupla leütés gyanú)', G.mac);
+    await macToHardware(page, f);
+    await H.hwKeyboard(page, f, { double: true, expect: 'dupla leütés gyanú: A' });
+    await f.step('Egér és trackpad: kihagyom', () => page.locator('#hw-skip').click(), 'Hangszóró és mikrofon');
+    await f.save();
+  });
+
+  test('mac-pointer-partial: részleges egér és trackpad teszt, hibás', async ({ page }) => {
+    const f = new H.Flow(page, 'mac-pointer-partial', 'Mac: a trackpad sarkai és a jobb kattintás nem működik, a teszt hibás', G.mac);
+    await macToHardware(page, f);
+    await f.step('Billentyűzet: kihagyom', () => page.locator('#hw-skip').click(), 'Egér és trackpad');
+    await H.hwPointer(page, f, { partial: true, expect: 'nem érzékelt kattintás: jobb felső sarok, bal alsó sarok, jobb alsó sarok' });
+    await f.save();
+  });
+
+  test('mac-keyboard-pointer-skip: mindkettő kihagyva', async ({ page }) => {
+    const f = new H.Flow(page, 'mac-keyboard-pointer-skip', 'Mac: a billentyűzet és az egér teszt kihagyva, a riportban nem tesztelt', G.mac);
+    await macToHardware(page, f);
+    await f.step('Billentyűzet: kihagyom', () => page.locator('#hw-skip').click(), 'Egér és trackpad');
+    await f.step('Egér és trackpad: kihagyom', () => page.locator('#hw-skip').click(), 'Hangszóró és mikrofon');
+    await f.step('Hang: kihagyom', () => page.locator('#hw-skip').click(), 'Előlapi kamera');
+    await f.step('Előlapi kamera: kihagyom', () => page.locator('#hw-skip').click(), 'Kijelző színei');
+    await f.step('Kijelző: kihagyom', () => page.locator('#hw-skip').click(), 'Ellenőrizd, mit küldünk el');
+    await expect(page.locator('#app')).toContainText('Billentyűzet');
+    await f.snap('Előnézet: minden kihagyott teszt nem tesztelt vagy kihagyva');
     await f.save();
   });
 

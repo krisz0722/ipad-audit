@@ -224,6 +224,79 @@ async function hwMedia(page, f, mode, name) {
   await hwNext(page);
 }
 
+// Egy billentyű megnyomása. Amit a Playwright nem ismer (például az ISO IntlBackslash), azt a protokollon küldjük.
+const RAW_KEYS = { IntlBackslash: { key: '<', vk: 226 } };
+async function pressCode(page, code) {
+  if (!RAW_KEYS[code]) { await page.keyboard.press(code); return; }
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Input.dispatchKeyEvent', { type: 'rawKeyDown', code, key: RAW_KEYS[code].key, windowsVirtualKeyCode: RAW_KEYS[code].vk });
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', code, key: RAW_KEYS[code].key, windowsVirtualKeyCode: RAW_KEYS[code].vk });
+  await cdp.detach();
+}
+
+// Billentyűzet (Mac): valódi billentyűesemények a Playwright billentyűzetével.
+// o.layout: 'iso', o.fn: a funkciósort is megnyomja, o.skip: kihagyott billentyű kódok, o.double: dupla leütést is előidéz.
+async function hwKeyboard(page, f, o) {
+  o = o || {};
+  if (o.layout === 'iso') await page.locator('input[name=kbl][value=iso]').check();
+  await f.snap('Billentyűzet: a kiosztás kiválasztása');
+  await f.step('Billentyűzet: Indítás, a kiosztás megjelenik', () => page.locator('#hw-start').click());
+  await expect(page.locator('#key-overlay')).toBeVisible();
+  const keys = await page.evaluate(() => Array.from(document.querySelectorAll('.kcell')).map((e) => ({ code: e.getAttribute('data-code'), soft: e.className.indexOf('soft') >= 0 })));
+  const skip = o.skip || [];
+  const list = keys.filter((k) => (!k.soft || o.fn) && skip.indexOf(k.code) < 0).map((k) => k.code);
+  const half = Math.floor(list.length / 2);
+  for (const code of list.slice(0, half)) await pressCode(page, code);
+  await f.snap('Billentyűzet: félúton, az érzékelt billentyűk zöldek');
+  for (const code of list.slice(half)) await pressCode(page, code);
+  if (o.double) {
+    // Két leütés felengedés nélkül (a Playwright billentyűzete ezt ismétlésnek venné, ezért a protokollon küldjük).
+    const cdp = await page.context().newCDPSession(page);
+    for (let i = 0; i < 2; i++) await cdp.send('Input.dispatchKeyEvent', { type: 'rawKeyDown', code: 'KeyA', key: 'a', windowsVirtualKeyCode: 65 });
+    await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', code: 'KeyA', key: 'a', windowsVirtualKeyCode: 65 });
+    await cdp.detach();
+  }
+  await f.snap('Billentyűzet: a nyomogatás után');
+  await f.step('Billentyűzet: Kész', () => page.locator('#key-done').click());
+  await expect(page.locator('#result')).toContainText(o.expect || 'mind a');
+  await f.snap('Billentyűzet: eredmény');
+  await hwNext(page);
+}
+
+// Egér és trackpad (Mac): valódi egéresemények. o.partial: csak a rács egy része, két kattintás és egy görgetési irány.
+async function hwPointer(page, f, o) {
+  o = o || {};
+  await f.step('Egér: Indítás', () => page.locator('#hw-start').click());
+  await expect(page.locator('#pointer-overlay')).toBeVisible();
+  const { width: W, height: H } = page.viewportSize();
+  const COLS = 8, ROWS = 6;
+  const cx = (c) => Math.round((c + 0.5) * W / COLS), cy = (r) => Math.round((r + 0.5) * H / ROWS);
+  const limit = o.partial ? 30 : COLS * ROWS;
+  let n = 0;
+  for (let r = 0; r < ROWS && n < limit; r++) {
+    const cols = Array.from({ length: COLS }, (_, i) => i);
+    if (r % 2) cols.reverse();
+    for (const c of cols) { if (n++ >= limit) break; await page.mouse.move(cx(c), cy(r)); }
+    if (r === 2) await f.snap('Egér: félúton, a bejárt mezők zöldek');
+  }
+  const center = async (id) => { const b = await page.locator('.ptarget[data-id=' + id + ']').boundingBox(); await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2); };
+  for (const id of (o.partial ? ['tl', 'c'] : ['tl', 'tr', 'bl', 'br', 'c'])) await center(id);
+  await f.snap('Egér: a kattintási pontok');
+  if (!o.partial) await page.mouse.click(W / 2, Math.round(H * 0.65), { button: 'right' });
+  await page.mouse.move(W / 2, H / 2);
+  await page.mouse.wheel(0, 120);
+  if (!o.partial) {
+    await page.mouse.wheel(0, -120);
+    await page.mouse.wheel(60, 0);
+    await page.mouse.dblclick(W / 2, Math.round(H * 0.7));
+  }
+  await f.snap('Egér: jobb kattintás és görgetés után');
+  await f.step('Egér: Kész', () => page.locator('#pointer-done').click());
+  await expect(page.locator('#result')).toContainText(o.expect || 'mind a 48 mezőn');
+  await f.snap('Egér: eredmény');
+  await hwNext(page);
+}
+
 async function hwDisplay(page, f, verdict) {
   await f.step('Kijelző: Indítás, az első szín', () => page.locator('#hw-start').click());
   for (let i = 0; i < 6; i++) await page.locator('#color-next').click();
@@ -248,4 +321,4 @@ async function mockBackend(page, handler) {
   return requests;
 }
 
-module.exports = { OUT, UA, IPAD, DESKTOP, LOG9, FILE17, USB, MAC, Flow, emulate, begin, chooseApple, hwTouch, hwMotion, hwMedia, hwDisplay, hwNext, mockBackend, expect };
+module.exports = { OUT, UA, IPAD, DESKTOP, LOG9, FILE17, USB, MAC, Flow, emulate, begin, chooseApple, hwTouch, hwMotion, hwMedia, hwDisplay, hwKeyboard, hwPointer, hwNext, mockBackend, expect };
