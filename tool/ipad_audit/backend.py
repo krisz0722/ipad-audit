@@ -48,3 +48,9 @@ class Backend:
         result = self.post({"action": "finish", "sid": sid, "serial": serial, "sections": sections})
         if not result.get("ok"):
             raise BackendError(result.get("error") or "A riport küldése nem sikerült.")
+
+    def report(self, code, kind, serial, sections):
+        result = self.post({"action": "report", "code": code, "kind": kind, "serial": serial, "sections": sections})
+        if not result.get("ok"):
+            raise BackendError(result.get("error") or "A riport küldése nem sikerült.")
+        return result

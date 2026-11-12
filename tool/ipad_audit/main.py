@@ -29,13 +29,13 @@ def camera_result(step, board, signals, flag):
     if step is None:
         return None
     if step.get("skipped"):
-        return {"text": "nem sikerült a beolvasás", "status": report.BAD}
+        return {"text": "a kameratesztet kihagyták", "status": report.NODATA}
     received_at = step.get("_seen_at", time.time())
     issued = board.check(step.get("code"), received_at)
     if issued is None:
-        return {"text": "érvénytelen vagy lejárt kód", "status": report.BAD}
+        return {"text": "érvénytelen vagy lejárt kód, a kamerateszt nem igazolt", "status": report.WARN}
     if not signals.flag_seen(flag, issued - 30, received_at + 5):
-        return {"text": "a kód jó, de ezen az iPaden nem futott a kamera", "status": report.BAD}
+        return {"text": "a kód jó, de a kamera aktivitása nem igazolható USB-n", "status": report.NODATA}
     return {"text": "friss kódot olvasott, a kamera futott ezen az iPaden", "status": report.OK}
 
 

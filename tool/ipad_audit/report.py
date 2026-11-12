@@ -95,10 +95,10 @@ def battery_section(raw):
     if log.get("firmware") is not None:
         rows.append(row("Akkuállapot (firmware)", f"{log['firmware']}%"))
     orig = log.get("original")
-    if orig == 1:
-        rows.append(row("Gyári akkucella", "igen (firmware szerint)", OK))
-    elif orig == 0:
-        rows.append(row("Gyári akkucella", "nem (firmware szerint)", WARN))
+    if _is_int(orig) and orig in (0, 1):
+        rows.append(row("Akku eredete", f"nem igazolt (rendszernapló OriginalBattery: {orig})", WARN))
+    else:
+        rows.append(row("Akku eredete", None))
     upo = log.get("upo")
     if upo is not None:
         rows.append(row("Váratlan leállások", upo, OK if upo == 0 else WARN))
@@ -188,15 +188,11 @@ def usb_sections(raw):
     rear = gestalt.get("RearFacingCameraModuleSerialNumber")
     front = gestalt.get("FrontFacingCameraModuleSerialNumber")
     hw = []
-    if not rear and not front:
-        hw += [row("Hátlapi kameramodul", None), row("Előlapi kameramodul", None)]
-    else:
-        # Ha csak az egyik hiányzik, az modul- vagy csatlakozóhiba jele.
-        for label, value in (("Hátlapi kameramodul", rear), ("Előlapi kameramodul", front)):
-            if value:
-                hw.append(row(label, f"válaszol ({mask_tail(value)})", OK))
-            else:
-                hw.append(row(label, "NEM VÁLASZOL, valószínű hardverhiba", BAD))
+    for label, value in (("Hátlapi kameramodul", rear), ("Előlapi kameramodul", front)):
+        if value:
+            hw.append(row(label, f"modulazonosító kiolvasható ({mask_tail(value)}); működés nem ellenőrzött", INFO))
+        else:
+            hw.append(row(label, None))
     touch = raw.get("touch") or {}
     if touch.get("Sensor Rows"):
         hw.append(row("Érintővezérlő", f"{touch['Sensor Rows']} x {touch.get('Sensor Columns')} mátrix, resetek: {touch.get('ResetCount')}"))

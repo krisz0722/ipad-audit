@@ -2,7 +2,7 @@
 
 [Magyar](README.md) | **English**
 
-A tool for buying used iPads, iPhones and Macs. The buyer sends the seller a single-use link, the seller walks through a wizard on their own device, and the result goes to the buyer in one email.
+A tool for buying used iPads, iPhones and Macs. An iPad/iPhone seller first runs the USB reader, then performs browser tests on the device being sold. Each invitation permits two separate emails: the USB data report and the web test report.
 
 The code is public so that the seller (and anyone else) can see exactly what the page reads and what it sends.
 
@@ -10,15 +10,15 @@ The code is public so that the seller (and anyone else) can see exactly what the
 
 ## For sellers: what does the page read?
 
-| What we read | What we never read |
-|---|---|
-| battery cycle count and maximum capacity | passwords, Apple ID, email address, phone number |
-| device type, storage size, system version | photos, messages, contacts, files |
-| whether you are signed out of your Apple ID (you tell us) | installed apps, browsing data |
-| on a Mac: Activation Lock state, managed by an organization yes/no | IMEI, device name, location, Wi-Fi networks, MAC addresses, UDID |
-| the serial number (the buyer checks the model with Apple; the seller can switch it off in the preview, then only a fingerprint and its last 4 characters are sent) | |
+| What we read                                                                      | What we never read                                               |
+| --------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| battery cycle count and maximum capacity                                          | passwords, Apple ID, email address, phone number                 |
+| device type, USB hardware platform, storage size, system version                  | photos, messages, contacts, files                                |
+| whether you are signed out of your Apple ID (you tell us)                         | installed apps, browsing data                                    |
+| on a Mac: Activation Lock state, managed by an organization yes/no                | IMEI, device name, location, Wi-Fi networks, MAC addresses, UDID |
+| complete serial in the USB report; sharing remains optional in the Mac web report |                                                                  |
 
-The seller sees everything in a preview first, and nothing leaves the device until they press **Send**. The preview is built by the same function as the payload that is sent, so the two cannot differ.
+The USB reader asks for the invitation code and consent to automatic delivery before reading. Once reading finishes, the backend immediately emails the listed data. There is no clipboard copying or data pasting. The separate web report is sent only after preview approval and **Send**, and the page displays the delivered web report.
 
 ### How can you check this?
 
@@ -31,25 +31,26 @@ The deployed Apps Script cannot be verified from the outside, only the file in t
 
 ### How the serial number is handled
 
-By default the serial number goes to the buyer so that they can check the model with Apple's coverage checker. The seller sees it in the preview and can switch it off. In that case only the first 16 characters of `SHA-256(invite code + ":" + serial number)` and the last 4 characters of the serial number are sent. The invite code exists only with the seller and the buyer, so the serial number cannot be recovered from the email. When the device arrives, the buyer can compute the same value from the received device's serial number and confirm that the same device arrived. The serial number never appears in the email subject, only the fingerprint does.
+The USB report includes the complete serial, including in the email subject. The reader requests consent before reading. The separate iPad/iPhone web report does not repeat USB data; the invitation label links the emails. The Mac browser flow still offers serial sharing or a fingerprint.
 
 ## How does it work?
 
 There are two modes:
 
-1. **Seller wizard** ([web/](web/)): runs in the browser, nothing to install. On a Mac the seller pastes the output of a read-only Terminal command. On an iPad or iPhone the battery values come from Settings or from the system analytics file. The data is self-reported, so it is **not an authenticated measurement**.
-2. **Receiving program** ([tool/](tool/), [web/receiver/](web/receiver/)): runs on the buyer's computer and reads the iPad over USB (`pymobiledevice3`). This is the authenticated measurement, because the data comes from the device itself, not from the seller's browser.
+1. **Seller flow** ([web/](web/), [tool/ipad_audit/reader.py](tool/ipad_audit/reader.py)): the website explains the process. The USB reader runs on the computer, sends the first report automatically after consent, and opens the website. The seller returns to the original page on the iPad/iPhone, performs the web tests, and sends a separate report. The computer browser never tests the iPad hardware. The Mac flow still uses a read-only Terminal command.
+2. **Receiving program** ([tool/](tool/), [web/receiver/](web/receiver/)): runs on the buyer's computer and reads the iPad over USB (`pymobiledevice3`). This is a check on the buyer's own computer, but it is not cryptographic proof of the origin of the data or parts.
 
-The page never asks the seller to switch anything on and sends nothing to Apple. If the device has no log with the battery data, the seller says so with one button, and the report marks the battery data as "to be completed with a USB measurement": the seller then connects the device to their own computer and measures it there.
+Missing USB fields and unsupported browser tests are marked unknown/not tested, not as hardware faults. Data from a seller-controlled computer is not cryptographic proof.
 
-Data path in seller mode: browser, Google Apps Script, email to the buyer.
+Data path: USB reader, Google Apps Script, first email; then the device browser, Google Apps Script, second email. The recipient is the deployment owner. The backend retains delivery state, not report contents. An uncertain email delivery is not automatically repeated.
 
 ## Status
 
+- In the receiving program's battery report, the `OriginalBattery` system log value does not verify battery authenticity, whether it was replaced, or whether the service was authorized. If the value is missing, the origin is unknown. The battery manufacturer and service history are not currently verified.
 - The iPad file reader in the wizard relies on assumed field names (`Last_Value_CycleCount`, `MaximumCapacityPercent`) and still needs to be checked against a real file.
 - The `system_profiler` key names used by the Mac command still need to be checked on a real Mac.
 - The in-browser hardware test (touch, motion, audio, camera, display) is part of the wizard. Touch, camera and microphone still need checking on a real device. A test for the buttons and the headphone jack does not exist yet.
-- The wizard does everything it can in the browser first and, if unverified data is left at the end, offers the USB program (yes or no). If the seller picks the USB program, they start the page again on the computer with the same code. The browser test results from the iPad do not carry over, because nothing is stored; the report is sent from the computer with the data read over USB.
+- The seller USB report and web test report can be sent separately using the same invitation. The previous flow gallery documents the older, single-report process; the new flow has a separate integration test.
 - The wizard targets Safari 9.1 (iOS 9.3.5) and newer, so it uses ES5 only, without `fetch` or `TextEncoder`. The iOS 9.3.5 menu names were checked on a real iPad, the names for other versions come from Apple's Hungarian pages and guides and still need checking on real devices.
 
 ## Development
@@ -74,7 +75,33 @@ Tests for the in-browser readers:
 node --test tests/seller_parse.test.js
 ```
 
-Local preview:
+The following commands are for Linux. The Python programs require the project's `.venv` environment and the dependencies in [requirements.txt](requirements.txt).
+
+Start the web page:
+
+```bash
+npm start
+```
+
+Start the USB reader: after the invitation code and consent, it reads the device, asks the backend to email the USB report, and opens a local confirmation page. Continue web tests on the device being sold.
+
+```bash
+npm run usb
+```
+
+The two-report integration test uses a mock backend and sends no real email. It requires the project Python environment and Google Chrome:
+
+```bash
+npm run test:integration
+```
+
+Start the receiving program (it asks for a real invite code, connects to the backend, and sends the report at the end):
+
+```bash
+npm run audit
+```
+
+The web page can also be started directly with the script:
 
 ```
 scripts/serve.sh
@@ -90,8 +117,18 @@ Dependencies of the Python part: [requirements.txt](requirements.txt). Tests: [t
 
 1. Create a Google Sheet, open Extensions > Apps Script, and paste the contents of [backend/Code.gs](backend/Code.gs) and [backend/appsscript.json](backend/appsscript.json).
 2. Deploy it as a web app (execute as: you, access: anyone). Put the resulting `/exec` address into [web/config.js](web/config.js) and [tool/ipad_audit/config.py](tool/ipad_audit/config.py).
-3. The "New invite" item of the sheet's "iPad audit" menu issues a single-use code that is valid for 72 hours, and a ready message with the full link (the code is in it, so the seller does not have to type anything). The link also goes into the "Link" column of the sheet. The link is built from SITE_URL at the top of [backend/Code.gs](backend/Code.gs), change it to your own address.
+3. The "New invite" item of the sheet's "iPad audit" menu issues a code valid for 72 hours that allows one USB report and one web test report, and a ready message with the full link (the code is in it, so the seller does not have to type anything). The link also goes into the "Link" column of the sheet. The link is built from SITE_URL at the top of [backend/Code.gs](backend/Code.gs), change it to your own address.
 4. [.gitlab-ci.yml](.gitlab-ci.yml) publishes the `web/` folder to GitLab Pages.
+
+After backend changes, publish a new deployment version in Apps Script. Editing the local file or saving it in the editor does not update the running web app. Use Deploy > Manage deployments > Edit > New version to update the existing deployment, preserving its endpoint address and allowing a rollback to the previous version. The two-report flow requires the new report action; the previous deployment returns an unknown action error.
+
+After saving, select and run the email-free check from the editor's function list:
+
+```text
+checkDeployment
+```
+
+The check reports whether the invitation sheet and recipient are available, and the remaining MailApp quota. It does not create an invitation or send an email. Verify actual delivery in the recipient's mailbox with a separate test invitation and fictional data.
 
 The `/exec` address is not a secret. Protection comes from the invite code and the daily mail limit.
 

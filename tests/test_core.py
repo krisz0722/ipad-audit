@@ -5,6 +5,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tool"))
 
 from ipad_audit import report  # noqa: E402
+from ipad_audit.main import camera_result  # noqa: E402
 from ipad_audit.signals import Signals  # noqa: E402
 
 ROOT = os.path.join(os.path.dirname(__file__), "..", "tool", "ipad_audit")
@@ -73,6 +74,22 @@ def test_report_values():
     assert report.find_value(sections, "Aktivációs zár (Find My)").startswith("BE")
 
 
+def test_battery_origin_is_not_verified_by_log_flag():
+    for original in (0, 1):
+        section = report.battery_section({"battery_log": {"original": original}})
+        origin = next(row for row in section["rows"] if row["label"] == "Akku eredete")
+        assert origin["value"] == f"nem igazolt (rendszernapló OriginalBattery: {original})"
+        assert origin["status"] == report.WARN
+
+
+def test_missing_or_invalid_battery_origin_is_unknown():
+    for original in (None, 2, -1, "1", True, False):
+        section = report.battery_section({"battery_log": {"original": original}})
+        origin = next(row for row in section["rows"] if row["label"] == "Akku eredete")
+        assert origin["value"] == "nincs adat"
+        assert origin["status"] == report.NODATA
+
+
 def test_privacy_mask():
     text = str(report.usb_sections(RAW))
     for secret in ("a1b2c3d4", "Valaki iPadje", "490154203237518", "55:73", "55:74", "F0000000000000001"):
@@ -80,15 +97,39 @@ def test_privacy_mask():
     assert "DMPS00000FAK" in text
 
 
-def test_missing_single_camera_is_fault():
+def test_missing_single_camera_is_unknown():
     raw = dict(RAW, gestalt={"FrontFacingCameraModuleSerialNumber": "F0000000000000002"})
     sections = report.usb_sections(raw)
-    assert "NEM VÁLASZOL" in report.find_value(sections, "Hátlapi kameramodul")
+    assert report.find_value(sections, "Hátlapi kameramodul") == "nincs adat"
+    assert "működés nem ellenőrzött" in report.find_value(sections, "Előlapi kameramodul")
 
 
 def test_no_camera_data_is_not_fault():
     sections = report.usb_sections(dict(RAW, gestalt={}))
     assert report.find_value(sections, "Hátlapi kameramodul") == "nincs adat"
+
+
+def test_skipped_camera_test_is_unknown():
+    result = camera_result({"skipped": True}, None, None, "back")
+    assert result["status"] == report.NODATA
+
+
+def test_camera_with_missing_activity_signal_is_unknown():
+    class Board:
+        def check(self, code, received_at):
+            return received_at
+
+    result = camera_result({"code": "test", "_seen_at": 100}, Board(), Signals(), "back")
+    assert result["status"] == report.NODATA
+
+
+def test_invalid_camera_code_does_not_prove_hardware_failure():
+    class Board:
+        def check(self, code, received_at):
+            return None
+
+    result = camera_result({"code": "test", "_seen_at": 100}, Board(), Signals(), "back")
+    assert result["status"] == report.WARN
 
 
 def test_no_destructive_device_calls():

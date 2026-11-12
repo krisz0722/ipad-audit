@@ -1,13 +1,7 @@
-"""Hálózat nélküli kiolvasó az eladónak.
-
-Csak olvas, és csak a felsorolt mezőket írja ki a képernyőre egy rövid szövegblokkba. Nem csatlakozik az
-internetre és semmit nem küld el: az eredményt az eladó másolja be a weboldalra, ahol az előnézetben
-látja, mi megy tovább. UDID-t, IMEI-t, MAC-címet, eszköznevet nem olvas ki.
-"""
+"""USB-s kiolvasó: az eredményt helyben megnyitott weboldalon jeleníti meg."""
 import asyncio
+import argparse
 import re
-import shutil
-import subprocess
 import sys
 
 from ipad_audit.report import MODELS
@@ -55,6 +49,7 @@ def facts(raw):
         "model_name": MODELS.get(product),
         "os": _text(info.get("ProductVersion"), 20),
         "serial": serial,
+        "hardware_platform": _text(info.get("HardwarePlatform"), 20),
         "storage_gb": round(total / 1e9) if total else None,
         "cycles": _int(bat.get("CycleCount")),
         "design_capacity": design,
@@ -72,6 +67,7 @@ def build_block(raw):
         ("model_name", f["model_name"]),
         ("os", f["os"]),
         ("serial", f["serial"]),
+        ("hardware_platform", f["hardware_platform"]),
         ("storage_gb", f["storage_gb"]),
         ("cycles", f["cycles"]),
         ("design_capacity", f["design_capacity"]),
@@ -111,38 +107,23 @@ async def read_raw(notify):
     from ipad_audit import device
 
     lockdown = await device.connect(notify)
-    raw = {"info": dict(lockdown.all_values)}
+    raw = {"info": {}, "disk": {}}
+    nvram = lockdown.all_values.get("NonVolatileRAM") or {}
+    if isinstance(nvram, dict):
+        raw["info"]["NonVolatileRAM"] = {"fm-activation-locked": nvram.get("fm-activation-locked")}
+    for key in ("ProductType", "ProductVersion", "SerialNumber", "HardwarePlatform"):
+        try:
+            raw["info"][key] = await lockdown.get_value(key=key)
+        except Exception:
+            pass
     try:
-        raw["disk"] = await lockdown.get_value(domain="com.apple.disk_usage")
+        raw["disk"]["TotalDiskCapacity"] = await lockdown.get_value(domain="com.apple.disk_usage", key="TotalDiskCapacity")
     except Exception:
-        raw["disk"] = {}
+        pass
     async with DiagnosticsService(lockdown=lockdown) as diag:
-        raw["bat"] = await device._entry(diag, device.ENTRIES["bat"])
+        battery = await device._entry(diag, device.ENTRIES["bat"]) or {}
+        raw["bat"] = {key: battery[key] for key in ("CycleCount", "DesignCapacity", "AppleRawMaxCapacity", "NominalChargeCapacity") if key in battery}
     return raw
-
-
-def clipboard_command(platform, which=shutil.which):
-    """A vágólapra másoló rendszerparancs, vagy None, ha nincs ilyen."""
-    if platform.startswith("win"):
-        return ["clip"]
-    if platform == "darwin":
-        return ["pbcopy"]
-    for command in (["wl-copy"], ["xclip", "-selection", "clipboard"], ["xsel", "--clipboard", "--input"]):
-        if which(command[0]):
-            return command
-    return None
-
-
-def copy_to_clipboard(text, platform=sys.platform):
-    """Csak a helyi vágólapra másol, hálózatot nem használ."""
-    command = clipboard_command(platform)
-    if not command:
-        return False
-    try:
-        subprocess.run(command, input=text.encode("ascii", "replace"), check=True, timeout=10)
-        return True
-    except (OSError, subprocess.SubprocessError):
-        return False
 
 
 def pause():
@@ -154,11 +135,44 @@ def pause():
             pass
 
 
-def main():
+def usb_sections(raw):
+    values = facts(raw)
+    labels = {
+        "model": "Modellazonosító", "model_name": "Modell", "os": "Rendszerverzió",
+        "serial": "Sorozatszám", "hardware_platform": "Hardverplatform", "storage_gb": "Tárhely (GB)",
+        "cycles": "Töltési ciklusok", "design_capacity": "Tervezett kapacitás (mAh)",
+        "max_capacity": "Maximális kapacitás (mAh)", "capacity_percent": "Kapacitás (%)",
+        "activation_lock": "Aktiválási zár"
+    }
+    rows = []
+    for key, label in labels.items():
+        value = values[key]
+        if key == "activation_lock":
+            value = {"on": "bekapcsolva", "off": "kikapcsolva"}.get(value)
+        rows.append({"label": label, "value": str(value) if value is not None else "nem olvasható ki",
+                     "status": "info" if value is not None else "nodata", "tag": "USB-ből"})
+    return [{"title": "USB-s kiolvasás", "rows": rows}]
+
+
+def main(argv=None):
+    from ipad_audit import config, reader_web
+    from ipad_audit.backend import Backend, BackendError
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--code", default="")
+    args = parser.parse_args(argv)
+    code = re.sub(r"[\s-]", "", args.code or input("A vásárlótól kapott meghívókód: ")).upper()
+    if not re.fullmatch(r"(?:[0-9]{9}|[0-9A-Z]{12})", code):
+        print("Hibás meghívókód.", file=sys.stderr)
+        return 1
+    print("A program a modellt, serialt, hardverplatformot, rendszerverziót, tárhelyet, akkumulátoradatokat és az Aktiválási zár jelzését olvassa ki. A kiolvasás után a szerver automatikusan emailben elküldi ezeket a vásárlónak.", file=sys.stderr)
+    if input("Beleegyezel a kiolvasásba és az automatikus küldésbe? [igen/nem]: ").strip().lower() not in ("igen", "yes"):
+        return 0
+
     def notify(message):
         print(message, file=sys.stderr)
 
-    print("iPad akku-kiolvasó. Csak olvas, semmit nem küld el.", file=sys.stderr)
+    print("USB-kiolvasás, majd automatikus riportküldés.", file=sys.stderr)
     try:
         raw = asyncio.run(read_raw(notify))
     except (TimeoutError, KeyboardInterrupt):
@@ -170,17 +184,19 @@ def main():
         print("Windowson ellenőrizd, hogy az iTunes vagy az Apple Devices alkalmazás telepítve van-e.", file=sys.stderr)
         pause()
         sys.exit(1)
-    block = build_block(raw)
-    print(block)
     print("\nEzt találtuk az eszközödön:", file=sys.stderr)
     for line in summary_lines(raw):
         print("  " + line, file=sys.stderr)
-    if copy_to_clipboard(block):
-        print("\nA fenti szöveg a vágólapra került. Illeszd be a weboldalon.", file=sys.stderr)
-    else:
-        print("\nMásold ki a fenti szöveget (az IPAD-AUDIT-USB sortól az END sorig), és illeszd be a weboldalon.", file=sys.stderr)
-    pause()
+    sent = False
+    try:
+        Backend(config.BACKEND_URL).report(code, "usb", facts(raw)["serial"] or "ismeretlen", usb_sections(raw))
+        sent = True
+        print("A szerver elküldte a USB-riportot a vásárlónak.", file=sys.stderr)
+    except BackendError as error:
+        print("A USB-email küldése nem igazolt: " + str(error), file=sys.stderr)
+    reader_web.open_page(build_block(raw), code=code, usb_sent=sent)
+    return 0 if sent else 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

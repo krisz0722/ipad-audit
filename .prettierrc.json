@@ -1,0 +1,8 @@
+{
+  "overrides": [
+    {
+      "files": ["src/web/seller/*.js", "web/*.js"],
+      "options": { "trailingComma": "none" }
+    }
+  ]
+}

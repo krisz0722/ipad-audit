@@ -1,5 +1,5 @@
 // Az eladói varázsló. Független az átvételi oldal USB-s folyamatától (receiver/app.js).
-// Minden adat a böngészőben marad, amíg az eladó a végén meg nem nyomja a Küldés gombot.
+// A webes tesztek külön riportja a végén, beleegyezés után megy el. A reader a USB-riportot korábban küldi.
 // Felépítés: minden képernyő egy lépés (SCREENS). A megtett út (state.path, state.idx) a sessionStorage-ban és a
 // böngésző előzményeiben is megvan, ezért a Vissza gomb és a böngésző Vissza gombja is ugyanazt csinálja.
 (function () {
@@ -12,7 +12,17 @@
   var DEMO_ID = /^DEMO-/.test(hash) ? hash.slice(5).toLowerCase() : '';
   var CODE_PATTERN = /^(?:[0-9]{9}|[0-9A-Z]{12})$/;
   var CODE = CODE_PATTERN.test(hash) ? hash : '';
+  var usbDelivery = window.USB_READER_DATA || {};
+  if (CODE_PATTERN.test(usbDelivery.code || '')) CODE = usbDelivery.code;
   var MAX_FILE = 50 * 1024 * 1024;
+  var LOCAL_USB_KEY = 'ipad-audit-local-usb';
+  var localUsbBlock = window.USB_READER_BLOCK || '';
+  try {
+    if (localUsbBlock) sessionStorage.setItem(LOCAL_USB_KEY, localUsbBlock);
+    else localUsbBlock = sessionStorage.getItem(LOCAL_USB_KEY) || '';
+  } catch (e) { /* a helyi adatok mentés nélkül is használhatók */ }
+  window.USB_READER_BLOCK = undefined;
+  window.USB_READER_DATA = undefined;
 
   // Melyik gépen nyitották meg az oldalt: az eladandó iOS eszközön, vagy egy számítógépen?
   var DEVICE = P.detectOs(navigator.userAgent, navigator.maxTouchPoints || 0);

@@ -7,6 +7,7 @@ test:
   stage: test
   image: node:22-alpine
   script:
+    - npm install --include=dev --ignore-scripts --no-package-lock
     - npm test
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"

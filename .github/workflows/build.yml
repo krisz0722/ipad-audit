@@ -43,13 +43,13 @@ jobs:
       - name: Build single file
         run: >
           python -m PyInstaller --noconfirm --onefile --noupx --name ipad-audit-reader
-          --paths tool --collect-all pymobiledevice3 tool/ipad_audit/reader.py
+          --paths tool --collect-all pymobiledevice3 --add-data "web:web" tool/ipad_audit/reader.py
 
       - name: Build folder variant (Windows, fewer antivirus false positives)
         if: startsWith(matrix.name, 'windows')
         run: >
           python -m PyInstaller --noconfirm --onedir --noupx --name ipad-audit-reader-folder
-          --paths tool --collect-all pymobiledevice3 tool/ipad_audit/reader.py
+          --paths tool --collect-all pymobiledevice3 --add-data "web:web" tool/ipad_audit/reader.py
 
       - name: Package
         run: |

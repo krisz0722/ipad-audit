@@ -1,3 +1,5 @@
+import asyncio
+import pytest
 import os
 import re
 import sys
@@ -8,7 +10,7 @@ from ipad_audit import reader  # noqa: E402
 
 # Kitalált, nyilvánvalóan hamis adatok.
 RAW = {
-    "info": {"ProductType": "iPad2,5", "ProductVersion": "9.3.5", "SerialNumber": "DMPS00000FAK",
+    "info": {"ProductType": "iPad2,5", "ProductVersion": "9.3.5", "SerialNumber": "DMPS00000FAK", "HardwarePlatform": "s5l8942x",
              "UniqueDeviceID": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678", "DeviceName": "Valaki iPadje",
              "InternationalMobileEquipmentIdentity": "490154203237518", "WiFiAddress": "02:00:00:00:55:73",
              "NonVolatileRAM": {"fm-activation-locked": b"NO"}},
@@ -22,7 +24,7 @@ def test_block_has_only_listed_fields():
     lines = block.splitlines()
     assert lines[0] == "IPAD-AUDIT-USB 1" and lines[-1] == "END"
     keys = [line.split(":")[0] for line in lines[1:-1]]
-    assert keys == ["model", "model_name", "os", "serial", "storage_gb", "cycles", "design_capacity",
+    assert keys == ["model", "model_name", "os", "serial", "hardware_platform", "storage_gb", "cycles", "design_capacity",
                     "max_capacity", "capacity_percent", "activation_lock"]
 
 
@@ -30,10 +32,55 @@ def test_block_values():
     block = reader.build_block(RAW)
     assert "model_name: iPad mini 1" in block
     assert "os: 9.3.5" in block
+    assert "serial: DMPS00000FAK" in block
+    assert "hardware_platform: s5l8942x" in block
     assert "cycles: 244" in block
     assert "capacity_percent: 84.7" in block
     assert "storage_gb: 16" in block
     assert "activation_lock: off" in block
+
+
+def test_read_raw_requests_only_listed_fields(monkeypatch):
+    from ipad_audit import device
+    from pymobiledevice3.services import diagnostics
+
+    requests = []
+
+    class Lockdown:
+        all_values = {"NonVolatileRAM": {"fm-activation-locked": b"NO", "unrelated": "PRIVATE"},
+                      "DeviceName": "PRIVATE"}
+
+        async def get_value(self, domain=None, key=None):
+            requests.append((domain, key))
+            return {"ProductType": "iPad2,5", "ProductVersion": "9.3.5",
+                    "SerialNumber": "DMPS00000FAK", "HardwarePlatform": "s5l8942x", "TotalDiskCapacity": 16000000000}[key]
+
+    class Diagnostics:
+        def __init__(self, lockdown):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+    async def connect(notify):
+        return Lockdown()
+
+    async def entry(diag, names):
+        return {"CycleCount": 244, "SerialNumber": "PRIVATE"}
+
+    monkeypatch.setattr(device, "connect", connect)
+    monkeypatch.setattr(device, "_entry", entry)
+    monkeypatch.setattr(diagnostics, "DiagnosticsService", Diagnostics)
+    raw = asyncio.run(reader.read_raw(lambda message: None))
+    assert requests == [(None, "ProductType"), (None, "ProductVersion"), (None, "SerialNumber"), (None, "HardwarePlatform"),
+                        ("com.apple.disk_usage", "TotalDiskCapacity")]
+    assert raw["info"]["SerialNumber"] == "DMPS00000FAK"
+    assert raw["info"]["NonVolatileRAM"] == {"fm-activation-locked": b"NO"}
+    assert reader.facts(raw)["activation_lock"] == "off"
+    assert raw["bat"] == {"CycleCount": 244}
 
 
 def test_block_never_contains_identifiers():
@@ -73,32 +120,92 @@ def test_summary_without_battery_and_lock_state():
     assert "nem sikerült kiolvasni" in text and "nem olvasható ki" in text
 
 
-def test_reader_has_no_network_code():
+def test_usb_email_contains_only_whitelisted_facts():
     path = os.path.join(os.path.dirname(__file__), "..", "tool", "ipad_audit", "reader.py")
     with open(path, encoding="utf-8") as handle:
         source = handle.read()
-    forbidden = re.compile(r"^\s*(import|from)\s+(urllib|requests|http|socket|ssl|httpx|aiohttp|backend|ipad_audit\.backend)\b", re.M)
-    assert not forbidden.search(source)
-    assert "backend" not in source.replace("Hálózat", "")
+    assert "device.collect(" not in source
+    text = str(reader.usb_sections(RAW))
+    assert "DMPS00000FAK" in text
+    for private in ("a1b2c3d4", "Valaki iPadje", "490154203237518", "55:73"):
+        assert private not in text
 
 
-def test_clipboard_command_per_platform():
-    assert reader.clipboard_command("win32") == ["clip"]
-    assert reader.clipboard_command("darwin") == ["pbcopy"]
-    assert reader.clipboard_command("linux", which=lambda name: "/usr/bin/" + name if name == "wl-copy" else None) == ["wl-copy"]
-    assert reader.clipboard_command("linux", which=lambda name: "/usr/bin/" + name if name == "xclip" else None) == ["xclip", "-selection", "clipboard"]
-    assert reader.clipboard_command("linux", which=lambda name: None) is None
+def test_main_opens_web_page_with_read_data(monkeypatch, capsys):
+    from ipad_audit import reader_web
+    from ipad_audit.backend import Backend
 
+    opened = []
 
-def test_copy_without_clipboard_tool_is_false():
-    # A valódi vágólaphoz a teszt nem nyúlhat, ezért a parancskeresést lecseréljük.
-    original = reader.clipboard_command
-    reader.clipboard_command = lambda platform, which=None: None
-    try:
-        assert reader.copy_to_clipboard("x") is False
-    finally:
-        reader.clipboard_command = original
+    async def read(notify):
+        return RAW
+
+    monkeypatch.setattr(reader, "read_raw", read)
+    monkeypatch.setattr(reader_web, "open_page", lambda block, **options: opened.append((block, options)))
+    monkeypatch.setattr("builtins.input", lambda prompt: "igen")
+    sent = []
+    monkeypatch.setattr(Backend, "report", lambda self, *args: sent.append(args))
+    reader.main(["--code", "123456789"])
+    output = capsys.readouterr()
+    assert opened == [(reader.build_block(RAW), {"code": "123456789", "usb_sent": True})]
+    assert sent[0][:3] == ("123456789", "usb", "DMPS00000FAK")
+    assert "DMPS00000FAK" not in output.out + output.err
 
 
 def test_pause_does_nothing_when_not_frozen():
     reader.pause()
+
+
+def test_local_web_handoff_is_private_and_reloadable(tmp_path):
+    import threading
+    from urllib.error import HTTPError
+    from urllib.request import urlopen
+
+    from ipad_audit import reader_web
+
+    (tmp_path / "index.html").write_text('<script src="seller.js"></script>', encoding="utf-8")
+    server, url = reader_web.create_server(reader.build_block(RAW), tmp_path)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        assert "DMPS00000FAK" not in url
+        with urlopen(url) as response:
+            assert b"serial: DMPS00000FAK" in response.read()
+            assert response.headers["Cache-Control"] == "no-store"
+        with urlopen(url) as response:
+            assert b"serial: DMPS00000FAK" in response.read()
+        try:
+            urlopen(url + "../index.html")
+            assert False, "unexpected path accepted"
+        except HTTPError as error:
+            assert error.code == 404
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+
+def test_no_consent_does_not_read_or_send(monkeypatch):
+    monkeypatch.setattr("builtins.input", lambda prompt: "nem")
+    monkeypatch.setattr(reader, "read_raw", lambda notify: pytest.fail("reading without consent"))
+    assert reader.main(["--code", "123456789"]) == 0
+
+
+def test_local_web_missing_marker_is_rejected(tmp_path):
+    import threading
+    from urllib.error import HTTPError
+    from urllib.request import urlopen
+    from ipad_audit import reader_web
+
+    (tmp_path / "index.html").write_text("<html></html>", encoding="utf-8")
+    server, url = reader_web.create_server(reader.build_block(RAW), tmp_path)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with pytest.raises(HTTPError) as error:
+            urlopen(url)
+        assert error.value.code == 500
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
