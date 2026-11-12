@@ -1,6 +1,7 @@
 // iPad audit fogadó. Google Táblához kötött Apps Script.
 // Meghívó nélkül semmit nem fogad el és emailt sem küld.
 
+var BACKEND_VERSION = "2026.11.13.1";
 var SHEET_NAME = "Meghívók";
 var INVITE_HOURS = 72;
 var MAX_BODY = 60000;
@@ -82,12 +83,12 @@ function inviteLink_(code) {
 // A vásárló ezt az üzenetet küldi az eladónak. Minden, ami kell, benne van: a link és a kód.
 function inviteMessage_(code) {
   return (
-    "Az eszközöd állapotának ellenőrzéséhez nyisd meg ezt a linket: " +
+    "Az eszközöd állapotának ellenőrzéséhez nyisd meg ezt a linket:\n" +
     inviteLink_(code) +
-    "\n" +
-    "A meghívókód: " +
+    "\n\n" +
+    "A meghívókód:\n" +
     groupCode_(code) +
-    " (a linkben már benne van, nem kell beírnod). " +
+    "\n\nA kód a linkben már benne van, nem kell beírnod.\n\n" +
     "A kód " +
     INVITE_HOURS +
     " óráig érvényes, és egy USB-riporthoz, valamint egy webes tesztriporthoz használható."
@@ -96,15 +97,20 @@ function inviteMessage_(code) {
 
 function inviteDialogHtml_(code) {
   return (
-    '<div style="font:14px system-ui,sans-serif">' +
-    "<p><b>A meghívó kész.</b> Kód: " +
+    '<div style="font:14px/1.5 Arial,sans-serif;color:#202124">' +
+    '<p style="margin:0 0 12px">Meghívókód:<br><b style="font-size:18px">' +
     esc_(groupCode_(code)) +
-    "</p>" +
-    "<p>Ezt az üzenetet küldheted az eladónak:</p>" +
-    '<textarea id="m" rows="7" style="width:100%;box-sizing:border-box;font:14px system-ui,sans-serif" readonly>' +
+    "</b></p>" +
+    '<p style="margin:0 0 16px">Link: <a href="' +
+    esc_(inviteLink_(code)) +
+    '" target="_blank" rel="noopener" style="color:#1a73e8;overflow-wrap:anywhere">' +
+    esc_(inviteLink_(code)) +
+    "</a></p>" +
+    '<label for="m" style="display:block;font-weight:600;margin-bottom:6px">Eladónak küldhető üzenet</label>' +
+    '<textarea id="m" rows="8" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #dadce0;border-radius:4px;font:14px/1.5 Arial,sans-serif" readonly>' +
     esc_(inviteMessage_(code)) +
     "</textarea>" +
-    '<p><button type="button" onclick="copyIt()">Másolás</button> <span id="s"></span></p></div>' +
+    '<p style="margin:12px 0 0"><button type="button" onclick="copyIt()" style="padding:8px 14px;border:0;border-radius:4px;background:#1a73e8;color:#fff;cursor:pointer">Üzenet másolása</button> <span id="s" role="status"></span></p></div>' +
     '<script>function copyIt(){var t=document.getElementById("m");t.focus();t.select();var ok=false;' +
     'try{ok=document.execCommand("copy");}catch(e){}' +
     'document.getElementById("s").textContent=ok?"Kimásolva.":"Jelöld ki a szöveget, és másold ki kézzel.";}</script>'
@@ -134,7 +140,7 @@ function newInvite() {
   ui.showModalDialog(
     HtmlService.createHtmlOutput(inviteDialogHtml_(code))
       .setWidth(520)
-      .setHeight(330),
+      .setHeight(440),
     "Meghívó kész",
   );
 }
@@ -142,6 +148,7 @@ function newInvite() {
 function checkDeployment() {
   var book = SpreadsheetApp.getActive();
   var result = {
+    version: BACKEND_VERSION,
     invitationSheetAvailable: Boolean(book && book.getSheetByName(SHEET_NAME)),
     recipientAvailable: Boolean(Session.getEffectiveUser().getEmail()),
     remainingMailQuota: MailApp.getRemainingDailyQuota(),
@@ -326,6 +333,16 @@ function report_(body) {
     return fail_("Hibás meghívó vagy riporttípus.");
   if (!Array.isArray(body.sections) || !body.sections.length)
     return fail_("Hibás riport.");
+  if (body.copyEmail !== undefined && typeof body.copyEmail !== "string")
+    return fail_("Hibás emailcím a saját másolathoz.");
+  var copyEmail = (body.copyEmail || "").trim();
+  if (
+    copyEmail &&
+    (copyEmail.length > 254 ||
+      /[^\x21-\x7e]/.test(copyEmail) ||
+      !/^[^\s@,;<>:"\\]+@[^\s@,;<>:"\\]+\.[^\s@,;<>:"\\]+$/.test(copyEmail))
+  )
+    return fail_("Hibás emailcím a saját másolathoz.");
   var cache = CacheService.getScriptCache();
   var failKey =
     "fails:" + Utilities.formatDate(new Date(), "Etc/UTC", "yyyy-MM-dd-HH");
@@ -357,13 +374,33 @@ function report_(body) {
   var dayKey =
     "mails:" + Utilities.formatDate(new Date(), "Etc/UTC", "yyyy-MM-dd");
   var sent = Number(props.getProperty(dayKey) || 0);
-  if (sent >= DAILY_MAILS)
+  var recipient = Session.getEffectiveUser().getEmail();
+  var copyRecipient =
+    copyEmail && copyEmail.toLowerCase() !== recipient.toLowerCase()
+      ? copyEmail
+      : "";
+  var recipientCount = copyRecipient ? 2 : 1;
+  if (
+    sent + recipientCount > DAILY_MAILS ||
+    MailApp.getRemainingDailyQuota() < recipientCount
+  )
     return fail_("Elérte a napi riportkeretet, próbáld holnap.");
   var content;
   try {
     content = render_(body.sections);
   } catch (error) {
     return fail_("Hibás riport.");
+  }
+  if (kind === "usb") {
+    var continuation = inviteLink_(code);
+    content.text +=
+      "\nWebes teszt folytatása az eladandó iPaden vagy iPhone-on:\n" +
+      continuation +
+      "\n";
+    content.html +=
+      '<p><a href="' +
+      esc_(continuation) +
+      '">Webes teszt folytatása az eladandó iPaden vagy iPhone-on</a></p>';
   }
   var label = String(invite.values[COLS.label - 1] || "")
     .replace(/[\r\n]/g, " ")
@@ -372,10 +409,10 @@ function report_(body) {
     .replace(/[^0-9A-Za-z-]/g, "")
     .slice(0, 20);
   props.setProperty(key, "sending");
-  props.setProperty(dayKey, String(sent + 1));
+  props.setProperty(dayKey, String(sent + recipientCount));
   try {
-    MailApp.sendEmail({
-      to: Session.getEffectiveUser().getEmail(),
+    var mail = {
+      to: recipient,
       subject:
         "iPad audit " +
         (kind === "usb" ? "USB" : "webes teszt") +
@@ -385,7 +422,9 @@ function report_(body) {
         serial,
       body: content.text,
       htmlBody: content.html,
-    });
+    };
+    if (copyRecipient) mail.bcc = copyRecipient;
+    MailApp.sendEmail(mail);
     props.setProperty(key, "sent");
     var other = props.getProperty(
       "report:" + code + ":" + (kind === "usb" ? "web" : "usb"),
@@ -394,7 +433,7 @@ function report_(body) {
       .getRange(invite.row, COLS.status)
       .setValue(other === "sent" ? "riportok elküldve" : "részriport elküldve");
     sheet.getRange(invite.row, COLS.used).setValue(new Date());
-    return json_({ ok: true, kind: kind });
+    return json_({ ok: true, kind: kind, copySent: Boolean(copyEmail) });
   } catch (error) {
     return fail_(
       "A küldés eredménye bizonytalan. A vásárló ellenőrizze az emailt; nem küldjük újra automatikusan.",

@@ -120,7 +120,7 @@ function makeBackend(label) {
       "",
     ]);
   };
-  return { call, invite, rows, mails, dialogs, context };
+  return { call, invite, rows, mails, dialogs, context, props, cache };
 }
 
 const SECTIONS = [
@@ -135,6 +135,7 @@ const SECTIONS = [
 test("a deployment check jogosultságot ellenőriz, nem készít meghívót és nem küld emailt", () => {
   const backend = makeBackend();
   const result = backend.context.checkDeployment();
+  assert.strictEqual(result.version, "2026.11.13.1");
   assert.strictEqual(result.invitationSheetAvailable, true);
   assert.strictEqual(result.recipientAvailable, true);
   assert.strictEqual(result.remainingMailQuota, 100);
@@ -160,6 +161,122 @@ test("a report: ugyanaz a meghívó külön USB és webes emailt enged, retry ne
   assert.match(backend.mails[0].subject, /USB/);
   assert.match(backend.mails[1].subject, /webes teszt/);
   assert.strictEqual(backend.rows[1][3], "riportok elküldve");
+});
+
+test("a report: az opcionális saját másolat ugyanaz az email, a cím nem tárolódik", () => {
+  const backend = makeBackend();
+  backend.invite("123456789");
+  for (const kind of ["usb", "web"]) {
+    const payload = {
+      action: "report",
+      code: "123456789",
+      kind,
+      serial: "DMPS00000FAK",
+      sections: SECTIONS,
+      copyEmail: " seller+audit@example.test ",
+    };
+    const result = backend.call(payload);
+    assert.strictEqual(result.ok, true);
+    assert.strictEqual(result.copySent, true);
+    assert.strictEqual(backend.call(payload).duplicate, true);
+    assert.ok(!JSON.stringify(result).includes("seller+audit@example.test"));
+  }
+  assert.strictEqual(backend.mails.length, 2);
+  for (const mail of backend.mails) {
+    assert.strictEqual(mail.to, "owner@example.test");
+    assert.strictEqual(mail.bcc, "seller+audit@example.test");
+    assert.ok(mail.body.startsWith(backend.context.render_(SECTIONS).text));
+    assert.ok(mail.htmlBody.startsWith(backend.context.render_(SECTIONS).html));
+  }
+  assert.match(
+    backend.mails[0].body,
+    /https:\/\/apple\.audit\.kokocloud\.space\/#123456789/,
+  );
+  assert.ok(
+    backend.mails[0].htmlBody.includes(
+      'href="https://apple.audit.kokocloud.space/#123456789"',
+    ),
+  );
+  assert.strictEqual(
+    backend.mails[1].htmlBody,
+    backend.context.render_(SECTIONS).html,
+  );
+  const stored = JSON.stringify({
+    rows: backend.rows,
+    props: Array.from(backend.props),
+    cache: Array.from(backend.cache),
+  });
+  assert.ok(!stored.includes("seller+audit@example.test"));
+  assert.ok(Array.from(backend.props.values()).includes("4"));
+});
+
+test("a report: a hibás másolatcím nem küld és nem használja fel a meghívót", () => {
+  const backend = makeBackend();
+  backend.invite("123456789");
+  for (const copyEmail of [
+    null,
+    ["seller@example.test"],
+    "hibás",
+    "seller@example.test,other@example.test",
+    "seller@example.test\r\nBcc: other@example.test",
+    "a".repeat(255) + "@example.test",
+  ]) {
+    const result = backend.call({
+      action: "report",
+      code: "123456789",
+      kind: "usb",
+      sections: SECTIONS,
+      copyEmail,
+    });
+    assert.strictEqual(result.ok, false);
+    assert.match(result.error, /emailcím/);
+  }
+  assert.strictEqual(backend.mails.length, 0);
+  assert.strictEqual(backend.rows[1][3], "új");
+  assert.strictEqual(backend.props.size, 0);
+});
+
+test("a report: a saját másolat külön címzettként számít a keretbe", () => {
+  const backend = makeBackend();
+  backend.invite("123456789");
+  const dayKey = "mails:" + new Date().toISOString().slice(0, 13);
+  backend.props.set(dayKey, "19");
+  const payload = {
+    action: "report",
+    code: "123456789",
+    kind: "usb",
+    sections: SECTIONS,
+  };
+  assert.strictEqual(
+    backend.call({ ...payload, copyEmail: "seller@example.test" }).ok,
+    false,
+  );
+  assert.strictEqual(backend.mails.length, 0);
+  assert.strictEqual(backend.props.get(dayKey), "19");
+  assert.strictEqual(backend.call(payload).ok, true);
+  assert.strictEqual(backend.mails[0].bcc, undefined);
+  assert.strictEqual(backend.props.get(dayKey), "20");
+});
+
+test("a report: a MailApp címzettkerete és az azonos cím kezelése", () => {
+  const backend = makeBackend();
+  backend.invite("123456789");
+  backend.context.MailApp.getRemainingDailyQuota = () => 1;
+  const payload = {
+    action: "report",
+    code: "123456789",
+    kind: "usb",
+    sections: SECTIONS,
+  };
+  assert.strictEqual(
+    backend.call({ ...payload, copyEmail: "seller@example.test" }).ok,
+    false,
+  );
+  const result = backend.call({ ...payload, copyEmail: "OWNER@example.test" });
+  assert.strictEqual(result.ok, true);
+  assert.strictEqual(result.copySent, true);
+  assert.strictEqual(backend.mails.length, 1);
+  assert.strictEqual(backend.mails[0].bcc, undefined);
 });
 
 test("a report: lejárt, ismeretlen meghívó és hibás riport nem küld emailt", () => {
@@ -245,7 +362,11 @@ test("az Új meghívó teljes, előtöltött linket és másolható üzenetet ad
   assert.strictEqual(b.dialogs.length, 1);
   const html = b.dialogs[0].html;
   assert.ok(html.indexOf("https://apple.audit.kokocloud.space/#" + code) >= 0);
-  assert.ok(html.indexOf("Másolás") >= 0);
+  assert.ok(
+    html.includes('href="https://apple.audit.kokocloud.space/#' + code + '"'),
+  );
+  assert.ok(html.includes("Üzenet másolása"));
+  assert.ok(html.includes('Meghívókód:<br><b style="font-size:18px">'));
   assert.ok(
     html.indexOf(
       code.slice(0, 3) + " " + code.slice(3, 6) + " " + code.slice(6),
@@ -259,7 +380,11 @@ test("az üzenet nem kér semmit az eladótól, csak a linket és a kódot adja"
   const b = makeBackend();
   const message = b.context.inviteMessage_("123456789");
   assert.match(message, /https:\/\/apple\.audit\.kokocloud\.space\/#123456789/);
-  assert.match(message, /123 456 789/);
+  assert.match(
+    message,
+    /linket:\nhttps:\/\/apple\.audit\.kokocloud\.space\/#123456789\n\n/,
+  );
+  assert.match(message, /A meghívókód:\n123 456 789\n\n/);
   assert.ok(!/majd küld|útmutató/.test(message));
 });
 
