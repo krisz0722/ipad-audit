@@ -6,13 +6,16 @@ const path = require("node:path");
 const { spawn } = require("node:child_process");
 const readline = require("node:readline");
 const { chromium } = require("@playwright/test");
+const { makeBackend } = require("./helpers/backend.js");
 
 test(
-  "reader sends USB report, then seller sends separate web report after consent and reload",
+  "reader saves USB data to Sheet, prints continuation URL, watches web steps, and sends one combined seller email at the end",
   { timeout: 60000 },
   async () => {
-    const mails = [];
-    let interruptWeb = true;
+    const appsScript = makeBackend();
+    appsScript.invite("123456789");
+    const requests = [];
+    let interruptFinish = true;
     const backend = http.createServer((request, response) => {
       let body = "";
       request.on("data", (chunk) => {
@@ -20,10 +23,13 @@ test(
       });
       request.on("end", () => {
         const payload = JSON.parse(body);
-        assert.equal(payload.action, "report");
-        assert.equal(payload.code, "123456789");
-        if (payload.kind === "web" && interruptWeb) {
-          interruptWeb = false;
+        requests.push(payload);
+        if (
+          payload.action === "audit_event" &&
+          payload.step === "finish" &&
+          interruptFinish
+        ) {
+          interruptFinish = false;
           response.writeHead(200, {
             "Content-Type": "application/json",
             "Access-Control-Allow-Origin": "*",
@@ -36,70 +42,81 @@ test(
           );
           return;
         }
-        mails.push(payload);
+        const result = appsScript.call(payload);
         response.writeHead(200, {
           "Content-Type": "application/json",
           "Access-Control-Allow-Origin": "*",
         });
-        response.end(JSON.stringify({ ok: true, kind: payload.kind }));
+        response.end(JSON.stringify(result));
       });
     });
     await new Promise((resolve) => backend.listen(0, "127.0.0.1", resolve));
     const endpoint = "http://127.0.0.1:" + backend.address().port;
     const script = [
-      "import sys, threading, builtins",
+      "import sys, builtins",
       "sys.path.insert(0, 'tool')",
-      "from ipad_audit import reader, reader_web, config",
+      "from ipad_audit import audit, reader, reader_web, config",
       "config.BACKEND_URL = " + JSON.stringify(endpoint),
-      "builtins.input = lambda prompt: 'igen'",
+      "answers = iter(['igen', 'reader@example.test'])",
+      "builtins.input = lambda prompt: next(answers)",
       "async def read(notify):",
       '    return {"info": {"ProductType": "iPad2,5", "SerialNumber": "DMPS00000FAK", "ProductVersion": "9.3.5", "HardwarePlatform": "s5l8942x"}, "disk": {"TotalDiskCapacity": 16000000000}, "bat": {"CycleCount": 246, "DesignCapacity": 4490, "AppleRawMaxCapacity": 3637}}',
       "reader.read_raw = read",
-      'def open_page(block, code="", usb_sent=False):',
-      "    server, url = reader_web.create_server(block, code=code, usb_sent=usb_sent)",
-      "    thread = threading.Thread(target=server.serve_forever)",
-      "    thread.start()",
-      "    print(url, flush=True)",
-      "    sys.stdin.readline()",
-      "    server.shutdown()",
-      "    thread.join()",
-      "    server.server_close()",
-      "reader_web.open_page = open_page",
-      "reader.main(['--code', '123456789'])",
+      "reader_web.open_on_device = lambda code, **options: False",
+      "orig_watch = audit.watch",
+      "audit.watch = lambda *a, **kw: orig_watch(*a, **{**kw, 'interval': 0.05})",
+      "def reject_desktop(*args, **options):",
+      "    raise AssertionError('The reader must not open a computer browser or local server')",
+      "reader_web.open_page = reject_desktop",
+      "reader_web.create_server = reject_desktop",
+      "status = reader.main(['--code', '123456789', '--web-url', " +
+        JSON.stringify(endpoint + "/") +
+        "])",
+      "sys.exit(status)",
     ].join("\n");
     const worker = spawn(".venv/bin/python", ["-u", "-c", script], {
-      stdio: ["pipe", "pipe", "pipe"],
+      stdio: ["ignore", "pipe", "pipe"],
     });
-    const exited = new Promise((resolve) => worker.once("exit", resolve));
-    const lines = readline.createInterface({ input: worker.stdout });
+    const exited = new Promise((resolve) => worker.once("close", resolve));
+    let readerOutput = "";
+    worker.stderr.on("data", (chunk) => {
+      readerOutput += chunk;
+    });
+    const errLines = readline.createInterface({ input: worker.stderr });
     let browser;
     try {
       const address = await new Promise((resolve, reject) => {
-        lines.once("line", resolve);
+        errLines.on("line", (line) => {
+          if (line.startsWith(endpoint + "/#123456789.")) resolve(line.trim());
+        });
         worker.once("error", reject);
         worker.once("exit", (code) =>
-          reject(new Error("reader exited: " + code)),
+          reject(
+            new Error("reader exited early: " + code + "\n" + readerOutput),
+          ),
         );
       });
-      assert.equal(mails.length, 1);
-      assert.equal(mails[0].kind, "usb");
-      assert.match(JSON.stringify(mails[0]), /DMPS00000FAK/);
-      browser = await chromium.launch({ channel: "chrome", headless: true });
-      const desktop = await browser.newPage();
-      desktop.setDefaultTimeout(5000);
-      await desktop.goto(address);
-      assert.equal(await desktop.locator("#code").inputValue(), "123456789");
-      await desktop.locator("#start").click();
-      await desktop.locator("#k-ios").click();
       assert.match(
-        await desktop.locator("#app").innerText(),
-        /elküldte a USB-riportot/,
+        address,
+        new RegExp(
+          "^" +
+            endpoint.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") +
+            "/#123456789\\.[0-9A-F]{32}$",
+        ),
       );
-      await desktop.locator("#res-next").click();
-      await desktop
-        .getByRole("heading", { name: "Folytasd az eladandó eszközön" })
-        .waitFor();
+      assert.equal(appsScript.mails.length, 0);
+      assert.equal(appsScript.rows[1][3], "teszt folyamatban");
+      assert.match(JSON.stringify(appsScript.eventRows), /DMPS00000FAK/);
+      assert.doesNotMatch(
+        JSON.stringify({
+          rows: appsScript.rows,
+          events: appsScript.eventRows,
+          requests,
+        }),
+        /reader@example\.test/,
+      );
 
+      browser = await chromium.launch({ channel: "chrome", headless: true });
       const context = await browser.newContext({
         userAgent:
           "Mozilla/5.0 (iPad; CPU OS 9_3_5 like Mac OS X) AppleWebKit/601.1.46 Version/9.0 Mobile/13G36 Safari/601.1",
@@ -108,6 +125,9 @@ test(
       });
       const page = await context.newPage();
       page.setDefaultTimeout(5000);
+      await page.addInitScript(() => {
+        window.fetch = undefined;
+      });
       const files = new Set([
         "index.html",
         "style.css",
@@ -135,18 +155,28 @@ test(
           body: fs.readFileSync(path.join(__dirname, "..", "web", name)),
         });
       });
-      await page.goto(endpoint + "/#123456789");
+      await page.goto(address);
+      assert.equal(await page.locator("#code").count(), 0);
       await page.locator("#start").click();
       await page.locator("#k-ios").click();
+      await page.locator("#web-start").click();
+      assert.match(await page.locator("#msg").innerText(), /beleegyezésed/);
+      await page.locator("#audit-consent").check();
       await page.locator("#web-start").click();
       await page.locator("input[name=apple][value=yes]").check();
       await page.locator("#next").click();
       await page.locator("#hw-no").click();
       assert.equal(await page.locator("#consent").isChecked(), false);
-      assert.equal(mails.length, 1);
+      assert.equal(await page.locator("#copy-email").count(), 0);
+      assert.equal(appsScript.mails.length, 0);
       await page.locator("#consent").check();
       await page.locator("#send").click();
       await page.locator("#msg .error").waitFor();
+      assert.match(
+        await page.locator("#msg").innerText(),
+        /átmenetileg foglalt/,
+      );
+      assert.equal(appsScript.mails.length, 0);
       await page.reload();
       assert.equal(await page.locator("#consent").isChecked(), false);
       await page.locator("#consent").check();
@@ -161,27 +191,55 @@ test(
         "Köszönjük!",
         await page.locator("#app").innerText(),
       );
-      await page
-        .getByRole("heading", { name: "Elküldött webes riport" })
-        .waitFor();
-      assert.equal(mails.length, 2);
-      assert.equal(mails[1].kind, "web");
-      assert.match(JSON.stringify(mails[1].sections), /Hardverteszt/);
-      assert.doesNotMatch(
-        JSON.stringify(mails[1].sections),
-        /Töltési ciklusok|3637|USB-s kiolvasás/,
-      );
+      await page.getByRole("heading", { name: "Összesített riport" }).waitFor();
+      const doneText = await page.locator("#app").innerText();
+      assert.match(doneText, /A számítógépen futó reader most küldi/);
+      assert.match(doneText, /DMPS00000FAK/);
+      assert.match(doneText, /Hardverteszt/);
       assert.equal(
         await page.evaluate(() =>
           sessionStorage.getItem("ipad-audit-seller-v2"),
         ),
         null,
       );
+
+      assert.equal(await exited, 0, readerOutput);
+      assert.match(
+        readerOutput,
+        /A WEBES TESZTET AZ IPADEN VAGY IPHONE-ON FOLYTASD/,
+      );
+      assert.ok(readerOutput.split(/\r?\n/).includes(address));
+      assert.match(readerOutput, /USB-adatok mentése: rendben/);
+      assert.match(readerOutput, /Összesített riport mentése: rendben/);
+      assert.match(
+        readerOutput,
+        /Az összesített eladói email küldését a szerver visszaigazolta\./,
+      );
+      assert.doesNotMatch(
+        readerOutput,
+        /apple\.audit\.kokocloud\.space|DMPS00000FAK|reader@example\.test/,
+      );
+      assert.equal(appsScript.mails.length, 1);
+      assert.equal(appsScript.mails[0].to, "reader@example.test");
+      assert.equal(appsScript.mails[0].bcc, undefined);
+      assert.match(appsScript.mails[0].subject, /összesített riport/);
+      assert.match(appsScript.mails[0].body, /DMPS00000FAK/);
+      assert.match(appsScript.mails[0].body, /Hardverteszt/);
+      assert.match(appsScript.mails[0].body, /A teszt menete/);
+      assert.doesNotMatch(
+        JSON.stringify({
+          rows: appsScript.rows,
+          events: appsScript.eventRows,
+          props: Array.from(appsScript.props),
+          cache: Array.from(appsScript.cache),
+        }),
+        /reader@example\.test/,
+      );
     } finally {
       if (browser) await browser.close();
-      worker.stdin.end("\n");
+      worker.kill();
       await exited;
-      lines.close();
+      errLines.close();
       await new Promise((resolve) => backend.close(resolve));
     }
   },

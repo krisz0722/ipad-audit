@@ -11,7 +11,10 @@ test("a seller oldal megjeleníti a web verzióját és a frissítés dátumát"
     path.join(__dirname, "..", "web", "index.html"),
     "utf8",
   );
-  assert.match(html, /class="version-bar"[^>]*>\s*Web v\d{4}\.\d{2}\.\d{2}\.\d+/);
+  assert.match(
+    html,
+    /class="version-bar"[^>]*>\s*Web v\d{4}\.\d{2}\.\d{2}\.\d+/,
+  );
   assert.match(
     html,
     /<time datetime="\d{4}-\d{2}-\d{2}">\d{4}\.\d{2}\.\d{2}\.<\/time>/,

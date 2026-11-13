@@ -31,7 +31,7 @@ SCREENS.details = function () {
       esc(DEVICE.version) +
       (scr ? ", kijelző " + esc(scr) : "") +
       "." +
-      "<br>A pontos modellt, a tárhelyet és a sorozatszámot a böngésző nem látja. Ezeket nem kell beírnod: az USB-s program olvassa ki, ha a végén azt választod.</div>";
+      "<br>A pontos modellt, a tárhelyet és a sorozatszámot a böngésző nem látja. Ezeket nem kell beírnod: az USB-s program külön riportban küldi el.</div>";
   }
   show(
     top() +
@@ -202,8 +202,8 @@ SCREENS.review = function () {
   var html =
     top() +
     progress(5) +
-    "<h1>Ellenőrizd, mit küldünk el</h1>" +
-    '<p class="lead">Az alábbi lista a teljes tartalom. Ezeken kívül semmi nem megy el.</p>';
+    "<h1>Ellenőrizd a riportot</h1>" +
+    '<p class="lead">A rész-eredményeket már mentettük. A befejezéssel ezeket az adatokat a korábbi USB-adatokkal együtt összesítjük.</p>';
   if (state.kind === "mac" && d.cycles === null && d.capacity === null) {
     html +=
       '<div class="note warn">Nem adtál meg akkumulátor adatot. A vásárló ezt hiányként fogja látni.</div>';
@@ -213,10 +213,10 @@ SCREENS.review = function () {
     (DEMO
       ? '<div class="note">Próbaüzemben a Küldés gomb nem küld el semmit.</div>'
       : "") +
-    '<label class="check"><input type="checkbox" id="consent"> Elolvastam, és beleegyezem, hogy ezek az adatok elmenjenek a vásárlónak.</label>' +
+    '<label class="check"><input type="checkbox" id="consent"> Ellenőriztem az eredményeket, lezárom a tesztet, és kérem az összesített riport mentését.</label>' +
     '<div id="msg"></div>' +
     '<div class="nav"><button type="button" class="btn secondary" id="back">Vissza</button>' +
-    '<button type="button" class="btn" id="send" disabled>Küldés</button></div>';
+    '<button type="button" class="btn" id="send" disabled>Teszt befejezése</button></div>';
   show(html);
   $("consent").addEventListener("change", function () {
     $("send").disabled = !this.checked;
@@ -294,10 +294,24 @@ function webSections(data) {
   return result;
 }
 
-function send(sections, d) {
+function send(sections, d, request) {
+  if (request) {
+    if (DEMO || !state.auditConsent)
+      return Promise.reject(
+        serverError("A tesztmentéshez beleegyezés szükséges.")
+      );
+    if (!window.BACKEND_URL)
+      return Promise.reject(serverError("Az oldal backendje nincs beállítva."));
+    return post(request).then(function (response) {
+      if (!response || !response.ok)
+        throw serverError(
+          response && response.error ? response.error : "A mentés nem sikerült."
+        );
+      return response;
+    });
+  }
   if (state.sending || state.sent) return;
   if (!$("consent") || !$("consent").checked) return;
-  var serialField = d.fingerprint || "nincs";
   if (DEMO) {
     done(sections);
     return;
@@ -311,19 +325,11 @@ function send(sections, d) {
   }
   state.sending = true;
   $("send").disabled = true;
-  message("msg", '<p class="muted">Küldés...</p>');
-  post({
-    action: "report",
-    code: CODE,
-    kind: "web",
-    serial: serialField,
-    sections: sections
-  })
+  message("msg", '<p class="muted">Összesített riport mentése...</p>');
+  auditComplete(sections)
     .then(function (r) {
-      if (!r || !r.ok)
-        throw serverError(r && r.error ? r.error : "A küldés nem sikerült.");
       state.sending = false;
-      done(sections);
+      done(r.sections, r.copyStatus);
     })
     .catch(function (error) {
       state.sending = false;
@@ -334,7 +340,7 @@ function send(sections, d) {
           esc(
             error && error.fromServer
               ? error.message
-              : "Nincs kapcsolat a szerverrel. Ellenőrizd az internetet, és próbáld újra a Küldés gombbal."
+              : "Nincs kapcsolat a szerverrel. Az oldalt ne zárd be; próbáld újra a Teszt befejezése gombbal."
           ) +
           "</div>"
       );
@@ -342,9 +348,11 @@ function send(sections, d) {
 }
 
 // Küldés után a Vissza nem hozza vissza az előnézetet: a render mindig a záró képernyőt mutatja, és semmi nem mentődik.
-function done(sections) {
+function done(sections, copyStatus) {
   state.sent = true;
+  state.auditActive = false;
   state.demoSections = sections;
+  state.copyStatus = copyStatus || "";
   localUsbBlock = "";
   go("done");
   forget();
@@ -354,12 +362,19 @@ SCREENS.done = function () {
   var html =
     top() +
     "<h1>Köszönjük!</h1>" +
-    '<div class="success">Az adatok elmentek a vásárlónak. Az oldalt bezárhatod.</div>' +
-    "<p>Ezen az eszközön nem tároltunk semmit.</p>";
+    '<div class="success">Az összesített riportot elmentettük a private Sheetbe.</div>' +
+    (state.copyStatus === "sent"
+      ? "<p>Az összesített eladói email küldését a szerver visszaigazolta.</p>"
+      : state.copyStatus === "reader"
+        ? '<div class="note">A számítógépen futó reader most küldi az elején kért összesített emailt. A programot annak visszaigazolásáig hagyd nyitva.</div>'
+        : state.copyStatus === "missing"
+          ? '<div class="note warn">A böngészőlap újratöltése miatt az emailcím már nincs a memóriában, ezért email nem ment. A teljes riport a Sheetben megmaradt.</div>'
+          : "") +
+    "<p>Az átmeneti tesztadatokat töröltük. Az emailcímet nem mentjük el.</p>";
   if (state.demoSections) {
     html +=
       "<h2>" +
-      (DEMO ? "A webes teszt próba riportja" : "Elküldött webes riport") +
+      (DEMO ? "A webes teszt próba riportja" : "Összesített riport") +
       "</h2>" +
       sectionsHtml(state.demoSections);
   }

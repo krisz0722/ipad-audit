@@ -7,6 +7,7 @@ function render() {
   if (state.sent) state.step = "done";
   var screen = SCREENS[state.step] || SCREENS.welcome;
   screen();
+  auditScreen(state.step);
 }
 function go(name) {
   navCount++;

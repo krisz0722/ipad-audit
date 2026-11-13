@@ -14,7 +14,9 @@
   var DEMO = /^DEMO(-|$)/.test(hash);
   var DEMO_ID = /^DEMO-/.test(hash) ? hash.slice(5).toLowerCase() : '';
   var CODE_PATTERN = /^(?:[0-9]{9}|[0-9A-Z]{12})$/;
-  var CODE = CODE_PATTERN.test(hash) ? hash : '';
+  var inviteHash = hash.match(/^([0-9]{9}|[0-9A-Z]{12})(?:\.([0-9A-F]{32}))?$/);
+  var CODE = inviteHash ? inviteHash[1] : '';
+  var LINK_SID = inviteHash && inviteHash[2] ? inviteHash[2] : '';
   var usbDelivery = window.USB_READER_DATA || {};
   if (CODE_PATTERN.test(usbDelivery.code || '')) CODE = usbDelivery.code;
   var MAX_FILE = 50 * 1024 * 1024;
@@ -50,7 +52,7 @@
   // A letöltési mappa: a GitHub release legfrissebb kiadása. A config.js-ben a USB_TOOL_URL felülírhatja.
   var TOOL_BASE = window.USB_TOOL_URL || 'https://github.com/krisz0722/ipad-audit/releases/latest/download/';
   function pageAddress() {
-    return location.origin + location.pathname + (DEMO ? '#DEMO' : (CODE ? '#' + CODE : ''));
+    return location.origin + location.pathname + (DEMO ? '#DEMO' : (CODE ? '#' + CODE + (state.auditSid ? '.' + state.auditSid : '') : ''));
   }
 
   // Csak olvas, nem ír, nem csatlakozik a hálózatra. A profiles kimenetéből csak a két igen/nem sor jön át,
@@ -72,6 +74,13 @@
     shareSerial: true, apple: '', sid: '', sending: false, sent: false, noLog: false, demoSections: null,
     hw: {}, hwSkipped: false
   };
+  state.auditSid = LINK_SID;
+  state.auditSeq = 0;
+  state.auditQueue = [];
+  state.auditActive = false;
+  state.auditConsent = false;
+  state.auditSource = LINK_SID ? 'reader' : '';
+  state.auditEmailRequested = false;
 
   var SCREENS = {};
 
@@ -148,7 +157,10 @@ function top() {
   return (
     '<div class="top"><span class="brand">Eszköz-ellenőrzés</span>' +
     (DEMO ? '<span class="demo">Próbaüzem: semmi nem megy el</span>' : "") +
-    "</div>"
+    "</div>" +
+    (state.auditActive
+      ? '<p class="muted" id="audit-status" role="status">A teszt lépéseit a private Sheetbe mentjük.</p>'
+      : "")
   );
 }
 function progress(n) {
@@ -268,6 +280,7 @@ function render() {
   if (state.sent) state.step = "done";
   var screen = SCREENS[state.step] || SCREENS.welcome;
   screen();
+  auditScreen(state.step);
 }
 function go(name) {
   navCount++;
@@ -460,6 +473,7 @@ function restore() {
     if (!Array.isArray(saved.state.path) || typeof saved.state.idx !== "number")
       return false;
     if (CODE && saved.code && CODE !== saved.code) return false;
+    if (LINK_SID && saved.state.auditSid !== LINK_SID) return false;
     DEMO = !!saved.demo;
     CODE = saved.code || "";
     for (var key in saved.state) {
@@ -539,6 +553,273 @@ function collect() {
     }
   };
 }
+// ===== src/web/seller/45-audit-session.js =====
+/* ---------- session, lépésmentés és egyszeri összesített riport ---------- */
+
+var auditEmail = "";
+var auditPending = null;
+var auditFinishing = false;
+var auditLastScreen = "";
+
+function auditNotice(text) {
+  var node = $("audit-status");
+  if (node) node.textContent = text;
+}
+
+function auditCall(payload) {
+  return send(null, null, payload);
+}
+
+function auditFlush() {
+  if (
+    DEMO ||
+    !state.auditActive ||
+    !state.auditConsent ||
+    !state.auditQueue.length
+  )
+    return Promise.resolve();
+  if (auditPending) return auditPending;
+  var event = state.auditQueue[0];
+  if (event.step === "finish" && !auditFinishing) return Promise.resolve();
+  auditPending = auditCall({
+    action: "audit_event",
+    code: CODE,
+    sid: state.auditSid,
+    seq: event.seq,
+    step: event.step,
+    status: event.status,
+    sections: event.sections
+  }).then(
+    function () {
+      state.auditQueue.shift();
+      save();
+      auditPending = null;
+      auditNotice("A lépések mentve a private Sheetbe.");
+      return auditFlush();
+    },
+    function (error) {
+      auditPending = null;
+      auditNotice(
+        "A lépésmentésre várunk. A program újrapróbálja; az oldalt még ne zárd be."
+      );
+      throw error;
+    }
+  );
+  return auditPending;
+}
+
+function auditRecord(step, status, sections) {
+  if (DEMO || !state.auditActive || !state.auditConsent || state.sent) return;
+  for (var index = 0; index < state.auditQueue.length; index++) {
+    if (state.auditQueue[index].step === "finish") return;
+  }
+  if (state.auditSeq >= 200) {
+    auditNotice(
+      "Elérted a teszt lépéskorlátját. Az eddig mentett eredmények megmaradtak."
+    );
+    return;
+  }
+  state.auditSeq++;
+  state.auditQueue.push({
+    seq: state.auditSeq,
+    step: step,
+    status: status,
+    sections: sections || []
+  });
+  save();
+  auditFlush().catch(function () {});
+}
+
+function auditHardware(name, status) {
+  var step =
+    name === "camera_rear" ? "rear" : name === "camera_front" ? "front" : name;
+  auditRecord(step, status, webSections(collect()));
+}
+
+function auditScreen(name) {
+  if (name === auditLastScreen) return;
+  auditLastScreen = name;
+  var steps = {
+    details: "details",
+    mac_run: "start",
+    mac_manual: "details",
+    mac_result: "details",
+    hw_intro: "start",
+    hw_touch: "touch",
+    hw_motion: "motion",
+    hw_audio: "audio",
+    hw_camera_rear: "rear",
+    hw_camera_front: "front",
+    hw_display: "display",
+    hw_keyboard: "keyboard",
+    hw_pointer: "pointer",
+    review: "review"
+  };
+  if (steps[name]) auditRecord(steps[name], "started", webSections(collect()));
+}
+
+function auditNewSid() {
+  var crypto = window.crypto || window.msCrypto;
+  if (!crypto || !crypto.getRandomValues)
+    throw new Error("A böngésző nem támogatja a biztonságos tesztindítást.");
+  var bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  var value = "";
+  for (var index = 0; index < bytes.length; index++)
+    value += ("0" + bytes[index].toString(16)).slice(-2);
+  return value.toUpperCase();
+}
+
+function auditOpen(next, create) {
+  if (DEMO) {
+    go(next);
+    return;
+  }
+  if (!$("audit-consent") || !$("audit-consent").checked) {
+    message(
+      "msg",
+      '<div class="error">A tesztadatok lépésenkénti mentéséhez előbb add meg a beleegyezésed.</div>'
+    );
+    return;
+  }
+  if (!create && !/^[0-9A-F]{32}$/.test(state.auditSid)) {
+    message(
+      "msg",
+      '<div class="error">A reader végén megjelenő teljes folytatólinket nyisd meg ezen az eszközön.</div>'
+    );
+    return;
+  }
+  if (create) {
+    var wanted = $("audit-email-wanted").checked;
+    auditEmail = wanted ? $("audit-email").value.replace(/^\s+|\s+$/g, "") : "";
+    if (
+      wanted &&
+      (!auditEmail ||
+        auditEmail.length > 254 ||
+        /[^\x21-\x7e]/.test(auditEmail) ||
+        !/^[^\s@,;<>:"\\]+@[^\s@,;<>:"\\]+\.[^\s@,;<>:"\\]+$/.test(auditEmail))
+    ) {
+      message(
+        "msg",
+        '<div class="error">Adj meg egy érvényes emailcímet, vagy kapcsold ki az emailriport kérését.</div>'
+      );
+      return;
+    }
+    try {
+      if (!state.auditSid) state.auditSid = auditNewSid();
+    } catch (error) {
+      message("msg", '<div class="error">' + esc(error.message) + "</div>");
+      return;
+    }
+    state.auditSource = "browser";
+    state.auditEmailRequested = wanted;
+  }
+  state.auditConsent = true;
+  var opening = create
+    ? auditCall({
+        action: "audit_begin",
+        code: CODE,
+        sid: state.auditSid,
+        kind: "mac",
+        consent: true,
+        emailRequested: state.auditEmailRequested
+      })
+    : Promise.resolve();
+  opening
+    .then(function () {
+      return auditCall({
+        action: "audit_status",
+        code: CODE,
+        sid: state.auditSid,
+        after: 0
+      });
+    })
+    .then(function (result) {
+      state.auditEmailRequested = result.emailRequested;
+      state.auditQueue = state.auditQueue.filter(function (event) {
+        return event.seq > result.seq;
+      });
+      state.auditSeq = Math.max(state.auditSeq, result.seq);
+      if (result.state !== "running") {
+        done(
+          result.sections,
+          result.mailState === "sent"
+            ? "sent"
+            : result.emailRequested
+              ? "reader"
+              : ""
+        );
+        return;
+      }
+      state.auditActive = true;
+      auditRecord("start", "started", []);
+      go(next);
+    })
+    .catch(function (error) {
+      message(
+        "msg",
+        '<div class="error">' +
+          esc(
+            error.fromServer
+              ? error.message
+              : "A tesztindítás nem érte el a szervert. Próbáld újra."
+          ) +
+          "</div>"
+      );
+    });
+}
+
+function auditComplete(sections) {
+  auditFinishing = true;
+  auditRecord("finish", "ok", sections);
+  return auditFlush()
+    .then(function () {
+      return auditCall({
+        action: "audit_status",
+        code: CODE,
+        sid: state.auditSid
+      });
+    })
+    .then(function (result) {
+      if (result.state !== "completed")
+        throw serverError("A végső riport mentése még nem igazolt.");
+      if (
+        state.auditSource === "browser" &&
+        state.auditEmailRequested &&
+        auditEmail
+      ) {
+        return auditCall({
+          action: "audit_email",
+          code: CODE,
+          sid: state.auditSid,
+          email: auditEmail
+        }).then(function (mail) {
+          if (!mail.emailSent)
+            throw serverError(
+              "Az email küldése nem igazolt. Az eredmények a Sheetben megmaradtak."
+            );
+          auditEmail = "";
+          return { sections: result.sections, copyStatus: "sent" };
+        });
+      }
+      return {
+        sections: result.sections,
+        copyStatus: state.auditEmailRequested
+          ? state.auditSource === "browser"
+            ? "missing"
+            : "reader"
+          : ""
+      };
+    });
+}
+
+setInterval(function () {
+  if (state.auditActive && !state.sent) auditFlush().catch(function () {});
+}, 5000);
+
+window.addEventListener("error", function () {
+  auditRecord("error", "error", []);
+});
 // ===== src/web/seller/50-results.js =====
 /* ---------- eredmények: ugyanaz a Tovább és javítás gomb minden beolvasás után ---------- */
 
@@ -800,7 +1081,7 @@ function sectionsHtml(sections) {
 }
 
 function begin() {
-  var typed = $("code") ? $("code").value : "";
+  var typed = $("code") ? $("code").value : CODE;
   var text = String(typed)
     .toUpperCase()
     .replace(/[^0-9A-Z]/g, "");
@@ -825,7 +1106,7 @@ function begin() {
 SCREENS.welcome = function () {
   var example = window.SellerExample
     ? '<details class="example"><summary>Példa: ilyen riportot kapsz a végén (kitalált adatokkal)</summary>' +
-      '<p class="muted">Ez egy kitalált példa. A te riportod az előnézetben pontosan így fog kinézni, a te adataiddal, és csak a Küldés gomb után megy el.</p>' +
+      '<p class="muted">Ez egy kitalált példa. A saját eredményeidet a teszt végén ugyanilyen táblázatban ellenőrizheted.</p>' +
       sectionsHtml(P.buildSections(window.SellerExample.data)) +
       "</details>"
     : "";
@@ -833,7 +1114,7 @@ SCREENS.welcome = function () {
     top() +
       "<h1>Az eszközöd állapotának ellenőrzése</h1>" +
       (DEMO ? demoPanel() : "") +
-      '<p class="lead">Először letöltöd és a számítógépeden lefuttatod a USB-kiolvasót. A beleegyezésed után a kiolvasás végén az adatok emailben elmennek a vásárlónak. Utána az eladandó eszközön visszatérsz erre az oldalra, elvégzed a webes teszteket, és a végén külön tesztriportot küldesz. Összesen két email készül.</p>' +
+      '<p class="lead">Először a számítógépeden lefuttatod az USB-kiolvasót, majd az eladandó iPaden vagy iPhone-on elvégzed a webes teszteket. A beleegyezésed után a lépéseket és az eredményeket a vásárló private Sheetjébe mentjük. Az elején egyszer kérhetsz emailt: a végén egy összesített riportot kapsz. A számítógépes programot addig hagyd nyitva.</p>' +
       "<h2>Miért kérjük ezt?</h2>" +
       "<p>Egy használt eszköznél az akkumulátor kopását kívülről nem lehet megítélni. Ha mindketten ugyanazokat a számokat látjuk, az átvételnél nem lesz félreértés, és ez neked is megkönnyíti az eladást.</p>" +
       "<h2>Mit olvasunk ki, és mit nem?</h2>" +
@@ -842,10 +1123,10 @@ SCREENS.welcome = function () {
       "<li>az akkumulátor ciklusszáma és maximális kapacitása</li>" +
       "<li>az eszköz típusa, tárhelye és rendszerverziója</li>" +
       "<li>hogy ki van-e jelentkezve az Apple-fiókodból</li>" +
-      "<li>a sorozatszám, hogy a vásárló az Apple-nél ellenőrizhesse a modellt (kikapcsolhatod)</li>" +
+      "<li>a sorozatszám az USB-adatokkal együtt; a Mac webes riportjánál a megosztás választható</li>" +
       "</ul></div>" +
       '<div class="card"><h3>Ezt soha nem kérjük</h3><ul class="marks no">' +
-      "<li>jelszavak, Apple-fiók, e-mail cím, telefonszám</li>" +
+      "<li>jelszavak, Apple-fiók, az eszközön tárolt emailcímek, telefonszám</li>" +
       "<li>fotók, üzenetek, névjegyek, fájlok</li>" +
       "<li>telepített alkalmazások, böngészési adatok</li>" +
       "<li>IMEI, eszköznév, helyadat, Wi-Fi hálózatok</li>" +
@@ -854,18 +1135,20 @@ SCREENS.welcome = function () {
       example +
       "<h2>Hogyan védjük az adataidat?</h2>" +
       '<ul class="plain">' +
-      "<li><b>Te döntesz.</b> A USB-riport automatikus küldéséhez a program a kiolvasás előtt kér beleegyezést. A webes tesztek riportját a végén külön jóváhagyod.</li>" +
+      "<li><b>Te döntesz.</b> Az induláskor kérünk beleegyezést a kiolvasáshoz és a tesztadatok folyamatos mentéséhez. A végén ellenőrzöd és lezárod az összesített riportot.</li>" +
       "<li><b>Nem módosítunk semmit.</b> Az oldal nem telepít programot, és nem változtat az eszközödön.</li>" +
-      "<li><b>Egyetlen címzett.</b> A USB-adatok és a webes tesztek két külön emailben mennek el a vásárlónak. Az oldal átmenetileg megőrzi a folyamatot az adott böngészőfülben.</li>" +
+      "<li><b>Opcionális emailriport.</b> Az elején megadott címedre a végén egyetlen összesített riportot küldünk, ha kéred. A vásárló a Sheetben látja az eredményeket, külön emailt nem kap. Az emailcímet csak a küldésig tartjuk memóriában, a Sheetbe és a mentett tesztadatokba nem kerül.</li>" +
       '<li><b>Nyílt forráskód.</b> Az oldal teljes kódja nyilvános, bárki ellenőrizheti, mit csinál: <a href="https://gitlab.com/krisz0722/ipad-audit/-/tree/main/web" target="_blank" rel="noopener">forráskód megtekintése</a>.</li>' +
-      "<li><b>Bármikor kiléphetsz.</b> Ha meggondolod magad, zárd be az oldalt. Addig nem történik semmi.</li>" +
+      "<li><b>Bármikor megszakíthatod.</b> Az addig visszaigazolt rész-eredmények a vásárló private Sheetjében megmaradnak. Ha a követés megszakad és kértél emailt, befejezetlen riportot kapsz.</li>" +
       "</ul>" +
-      '<div class="note"><b>Fontos:</b> az oldalt megnyithatod az eladandó eszközön (a Beállításokból adod meg az adatokat), vagy egy számítógépen (iPad és iPhone esetén USB-kábellel olvassuk ki). Macnél azon a Macen nyisd meg, amelyet eladsz.</div>' +
-      "<h2>Meghívókód</h2>" +
-      "<p>Írd be a vásárlótól kapott 9 számjegyű kódot. A szóköz és a kötőjel nem számít.</p>" +
-      '<label class="field">Meghívókód<input type="text" id="code" value="' +
-      esc(DEMO ? "DEMO" : CODE) +
-      '" placeholder="Például: 123 456 789" maxlength="24" inputmode="numeric" autocomplete="off" spellcheck="false"></label>' +
+      '<div class="note"><b>Fontos:</b> iPadnél és iPhone-nál a kiolvasó a számítógépen fut USB-kábellel, a webes teszteket viszont az eladandó eszközön végzed. Macnél azon a Macen nyisd meg az oldalt, amelyet eladsz.</div>' +
+      (CODE && !DEMO
+        ? ""
+        : "<h2>Meghívókód</h2>" +
+          "<p>Írd be a vásárlótól kapott 9 számjegyű kódot. A szóköz és a kötőjel nem számít.</p>" +
+          '<label class="field">Meghívókód<input type="text" id="code" value="' +
+          esc(DEMO ? "DEMO" : CODE) +
+          '" placeholder="Például: 123 456 789" maxlength="24" inputmode="numeric" autocomplete="off" spellcheck="false"></label>') +
       '<div id="msg"></div>' +
       '<button type="button" class="btn" id="start">Rendben, kezdjük</button>'
   );
@@ -876,6 +1159,7 @@ SCREENS.welcome = function () {
       jumpDemo(this.getAttribute("data-demo"));
     });
   }
+  if (!$("code")) return;
   $("code").addEventListener("keydown", function (event) {
     if (event.key === "Enter" || event.keyCode === 13) begin();
   });
@@ -895,7 +1179,7 @@ function pickKind(kind) {
   }
   state.kind = kind;
   if (kind === "mac") {
-    go("mac_run");
+    go(DEMO || state.auditActive ? "mac_run" : "audit_start");
     return;
   }
   if (localUsbBlock) {
@@ -909,6 +1193,27 @@ function pickKind(kind) {
   go("web_intro");
 }
 
+SCREENS.audit_start = function () {
+  show(
+    top() +
+      "<h1>A teszt indítása</h1>" +
+      "<p>A teszt lépéseit, rész-eredményeit és hibajelzéseit a vásárló private Sheetjébe mentjük. Az összesített riport a végén készül el.</p>" +
+      '<label class="check"><input type="checkbox" id="audit-email-wanted"> Szeretnéd a végén emailben megkapni az összesített riportot?</label>' +
+      '<label class="field" id="audit-email-field" for="audit-email" hidden>Emailcím<input type="email" id="audit-email" maxlength="254" autocomplete="off" autocapitalize="none" spellcheck="false"></label>' +
+      '<p class="muted">A cím csak ennek a böngészőlapnak a memóriájában marad a küldésig; nem kerül a Sheetbe vagy a mentett tesztadatokba.</p>' +
+      '<label class="check"><input type="checkbox" id="audit-consent"> Beleegyezem a teszt lépéseinek és eredményeinek folyamatos mentésébe a vásárló private Sheetjében.</label>' +
+      '<div id="msg"></div><button type="button" class="btn" id="audit-next">Teszt indítása</button>' +
+      foot()
+  );
+  $("audit-email-wanted").addEventListener("change", function () {
+    $("audit-email-field").hidden = !this.checked;
+    if (!this.checked) $("audit-email").value = "";
+  });
+  on("audit-next", function () {
+    auditOpen("mac_run", true);
+  });
+};
+
 SCREENS.kind = function () {
   show(
     top() +
@@ -918,7 +1223,7 @@ SCREENS.kind = function () {
       choice(
         "k-ios",
         "iPad vagy iPhone",
-        "Az adatokat a Beállításokból olvassuk ki. Nem kell semmit telepítened.",
+        "USB-kiolvasás a számítógépen, majd webes tesztek ezen az eszközön.",
         state.kind === "ios"
       ) +
       choice(
@@ -983,7 +1288,7 @@ SCREENS.usb_get = function () {
     '<a href="https://github.com/krisz0722/ipad-audit/blob/main/tool/ipad_audit/reader.py" target="_blank" rel="noopener">a GitHubon</a> és ' +
     '<a href="https://gitlab.com/krisz0722/ipad-audit/-/blob/main/tool/ipad_audit/reader.py" target="_blank" rel="noopener">a GitLabon</a>.</li>' +
     "<li><b>Csak olvas.</b> Semmit nem módosít az eszközön.</li>" +
-    "<li><b>Előzetes beleegyezés.</b> A program a kiolvasás előtt kéri a meghívókódot és a beleegyezésedet. Utána a kiolvasott adatokat automatikusan elküldeti a vásárlónak emailben, majd megnyitja az oldalt a visszaigazolással.</li>" +
+    "<li><b>Előzetes beleegyezés.</b> A program a kiolvasás előtt kéri a meghívókódot és a beleegyezésedet. Az USB-adatokat a vásárló private Sheetjébe mentjük, majd az iPaden vagy iPhone-on folytatod a tesztet. Az elején egyszer kérhetsz összesített emailriportot saját magadnak; a vásárlónak nem küldünk emailt.</li>" +
     '<li><b>Ellenőrizhető letöltés.</b> A fájlt a GitHub építi a nyilvános kódból (<a href="https://github.com/krisz0722/ipad-audit/actions" target="_blank" rel="noopener">a build naplója</a>), ' +
     'a <a href="https://github.com/krisz0722/ipad-audit/releases/latest" target="_blank" rel="noopener">kiadás oldalán</a> minden fájl mellett ott az ellenőrző összeg (.sha256).</li>' +
     "</ul></div>";
@@ -1029,9 +1334,10 @@ SCREENS.usb_run = function () {
       "<li>" +
       runStep +
       "</li>" +
-      "<li>A programban add meg a meghívókódot, és hagyd jóvá az automatikus USB-riportküldést. A kiolvasás után az első email elmegy, a program pedig megnyitja az oldalt. A webes teszteket az eladandó eszközön folytasd.</li>" +
+      "<li>A programban add meg a meghívókódot, és hagyd jóvá a tesztadatok Sheetbe mentését. Ha a végén összesített emailriportot kérsz, itt egyszer megadhatod az emailcímedet.</li>" +
+      "<li>A kiolvasás mentése után a program megpróbálja az audit oldalát az iPaden vagy iPhone-on megnyitni. Ehhez engedélyezett Web Inspector és nyitott audit oldal vagy üres Safari tab szükséges. Ha ez nem sikerül, a programban kiemelten megjelenő teljes folytatólinket nyisd meg az eladandó eszköz Safarijában.</li>" +
       "</ol>" +
-      '<div class="note">A programot hagyd futni, amíg az oldalon dolgozol.</div>' +
+      '<div class="note">A webes teszteket az eladandó iPaden vagy iPhone-on végezd, ne a számítógépen. A readert hagyd nyitva a teljes webes teszt és a kért email visszaigazolásának végéig: a programban látod a mentett lépéseket.</div>' +
       foot()
   );
 };
@@ -1042,8 +1348,8 @@ SCREENS.usb_result = function () {
       progress(2) +
       "<h1>Kiolvasott adatok</h1>" +
       (usbDelivery.sent
-        ? '<div class="success">A szerver elküldte a USB-riportot a vásárlónak.</div>'
-        : '<div class="note warn">A USB-email küldése nincs visszaigazolva. Ellenőrizd a program üzenetét.</div>') +
+        ? '<div class="success">A szerver visszaigazolta az USB-adatok mentését.</div>'
+        : '<div class="note warn">Ellenőrizd a readerben, hogy a szerver visszaigazolta-e az USB-adatok mentését.</div>') +
       '<div id="result"></div>' +
       foot()
   );
@@ -1051,10 +1357,7 @@ SCREENS.usb_result = function () {
 };
 
 function publicSellerAddress() {
-  return (
-    "https://apple.audit.kokocloud.space/" +
-    (DEMO ? "#DEMO" : CODE ? "#" + CODE : "")
-  );
+  return pageAddress();
 }
 
 SCREENS.web_intro = function () {
@@ -1062,7 +1365,8 @@ SCREENS.web_intro = function () {
     top() +
       progress(2) +
       "<h1>USB-kiolvasás, majd webes tesztek</h1>" +
-      '<ol class="steps"><li>A számítógépen letöltöd és lefuttatod a kiolvasót. A program a beleegyezésed után automatikusan elküldi a USB-riportot.</li><li>Ezután az eladandó iPaden vagy iPhone-on visszatérsz erre az oldalra, és elvégzed a webes teszteket.</li><li>A tesztek végén egy külön webes riportot küldesz.</li></ol>' +
+      '<ol class="steps"><li>A reader a beleegyezésed után a USB-adatokat a vásárló private Sheetjébe menti.</li><li>Ezen az iPaden vagy iPhone-on elvégzed a webes teszteket; az eredményeket lépésenként mentjük.</li><li>A végén összesített riport készül. Ha a reader elején kérted, azt egyszer emailben is megkapod. A readert hagyd nyitva.</li></ol>' +
+      '<label class="check"><input type="checkbox" id="audit-consent"> Beleegyezem a webes teszt lépéseinek, rész-eredményeinek és hibajelzéseinek folyamatos mentésébe a vásárló private Sheetjében.</label><div id="msg"></div>' +
       choice(
         "web-download",
         "A kiolvasó letöltése",
@@ -1081,7 +1385,7 @@ SCREENS.web_intro = function () {
     go("usb_switch");
   });
   on("web-start", function () {
-    go("details");
+    auditOpen("details", false);
   });
 };
 
@@ -1090,10 +1394,11 @@ SCREENS.usb_web_continue = function () {
     top() +
       "<h1>Folytasd az eladandó eszközön</h1>" +
       "<p>Az iPad vagy iPhone webes tesztjeit azon az eszközön kell elvégezni. Térj vissza az ott megnyitott oldalra, és válaszd a folytatást.</p>" +
+      "<p>Az iPaden vagy iPhone-on a readerben megjelenő teljes folytatólinket nyisd meg. Az a meghívókódot és a teszt sessionazonosítóját is tartalmazza; egyiket sem kell külön beírnod.</p>" +
       '<p><a href="' +
       esc(publicSellerAddress()) +
       '">A webes tesztek oldala, a meghívóddal</a></p>' +
-      '<p class="muted">A számítógép kameráját vagy kijelzőjét nem teszteljük az iPad helyett. A webes tesztek végén külön email készül.</p>' +
+      '<p class="muted">A számítógép kameráját vagy kijelzőjét nem teszteljük az iPad helyett. Az eredményeket folyamatosan mentjük; email csak a teszt végén készül, ha az elején kérted.</p>' +
       foot()
   );
 };
@@ -1108,7 +1413,7 @@ SCREENS.usb_switch = function () {
       esc(publicSellerAddress()) +
       "</pre>" +
       '<button type="button" class="btn small" id="copy-addr">Cím másolása</button><span class="muted" id="copied-addr"></span>' +
-      '<div class="note">A meghívókód a címben benne van. A számítógépen töltsd le és futtasd a kiolvasót. Az automatikus USB-email után ezen az eszközön térj vissza, és folytasd a webes tesztekkel.</div>' +
+      '<div class="note">A meghívókód a címben benne van. A számítógépen töltsd le és futtasd a kiolvasót. Ezután a reader teljes folytatólinkjével térj vissza erre az eszközre. A readert hagyd nyitva a teszt végéig.</div>' +
       foot()
   );
   on("copy-addr", function () {
@@ -1489,6 +1794,7 @@ function hwNext() {
 function hwDone(name, status, detail) {
   state.hw[name] = { status: status, detail: detail || "" };
   save();
+  auditHardware(name, status);
 }
 function hwResult(name) {
   var r = state.hw[name];
@@ -1574,6 +1880,7 @@ SCREENS.hw_intro = function () {
   });
   on("hw-no", function () {
     state.hwSkipped = true;
+    auditRecord("skip", "skipped", webSections(collect()));
     go(afterHw());
   });
 };
@@ -2455,7 +2762,7 @@ SCREENS.details = function () {
       esc(DEVICE.version) +
       (scr ? ", kijelző " + esc(scr) : "") +
       "." +
-      "<br>A pontos modellt, a tárhelyet és a sorozatszámot a böngésző nem látja. Ezeket nem kell beírnod: az USB-s program olvassa ki, ha a végén azt választod.</div>";
+      "<br>A pontos modellt, a tárhelyet és a sorozatszámot a böngésző nem látja. Ezeket nem kell beírnod: az USB-s program külön riportban küldi el.</div>";
   }
   show(
     top() +
@@ -2626,8 +2933,8 @@ SCREENS.review = function () {
   var html =
     top() +
     progress(5) +
-    "<h1>Ellenőrizd, mit küldünk el</h1>" +
-    '<p class="lead">Az alábbi lista a teljes tartalom. Ezeken kívül semmi nem megy el.</p>';
+    "<h1>Ellenőrizd a riportot</h1>" +
+    '<p class="lead">A rész-eredményeket már mentettük. A befejezéssel ezeket az adatokat a korábbi USB-adatokkal együtt összesítjük.</p>';
   if (state.kind === "mac" && d.cycles === null && d.capacity === null) {
     html +=
       '<div class="note warn">Nem adtál meg akkumulátor adatot. A vásárló ezt hiányként fogja látni.</div>';
@@ -2637,10 +2944,10 @@ SCREENS.review = function () {
     (DEMO
       ? '<div class="note">Próbaüzemben a Küldés gomb nem küld el semmit.</div>'
       : "") +
-    '<label class="check"><input type="checkbox" id="consent"> Elolvastam, és beleegyezem, hogy ezek az adatok elmenjenek a vásárlónak.</label>' +
+    '<label class="check"><input type="checkbox" id="consent"> Ellenőriztem az eredményeket, lezárom a tesztet, és kérem az összesített riport mentését.</label>' +
     '<div id="msg"></div>' +
     '<div class="nav"><button type="button" class="btn secondary" id="back">Vissza</button>' +
-    '<button type="button" class="btn" id="send" disabled>Küldés</button></div>';
+    '<button type="button" class="btn" id="send" disabled>Teszt befejezése</button></div>';
   show(html);
   $("consent").addEventListener("change", function () {
     $("send").disabled = !this.checked;
@@ -2718,10 +3025,24 @@ function webSections(data) {
   return result;
 }
 
-function send(sections, d) {
+function send(sections, d, request) {
+  if (request) {
+    if (DEMO || !state.auditConsent)
+      return Promise.reject(
+        serverError("A tesztmentéshez beleegyezés szükséges.")
+      );
+    if (!window.BACKEND_URL)
+      return Promise.reject(serverError("Az oldal backendje nincs beállítva."));
+    return post(request).then(function (response) {
+      if (!response || !response.ok)
+        throw serverError(
+          response && response.error ? response.error : "A mentés nem sikerült."
+        );
+      return response;
+    });
+  }
   if (state.sending || state.sent) return;
   if (!$("consent") || !$("consent").checked) return;
-  var serialField = d.fingerprint || "nincs";
   if (DEMO) {
     done(sections);
     return;
@@ -2735,19 +3056,11 @@ function send(sections, d) {
   }
   state.sending = true;
   $("send").disabled = true;
-  message("msg", '<p class="muted">Küldés...</p>');
-  post({
-    action: "report",
-    code: CODE,
-    kind: "web",
-    serial: serialField,
-    sections: sections
-  })
+  message("msg", '<p class="muted">Összesített riport mentése...</p>');
+  auditComplete(sections)
     .then(function (r) {
-      if (!r || !r.ok)
-        throw serverError(r && r.error ? r.error : "A küldés nem sikerült.");
       state.sending = false;
-      done(sections);
+      done(r.sections, r.copyStatus);
     })
     .catch(function (error) {
       state.sending = false;
@@ -2758,7 +3071,7 @@ function send(sections, d) {
           esc(
             error && error.fromServer
               ? error.message
-              : "Nincs kapcsolat a szerverrel. Ellenőrizd az internetet, és próbáld újra a Küldés gombbal."
+              : "Nincs kapcsolat a szerverrel. Az oldalt ne zárd be; próbáld újra a Teszt befejezése gombbal."
           ) +
           "</div>"
       );
@@ -2766,9 +3079,11 @@ function send(sections, d) {
 }
 
 // Küldés után a Vissza nem hozza vissza az előnézetet: a render mindig a záró képernyőt mutatja, és semmi nem mentődik.
-function done(sections) {
+function done(sections, copyStatus) {
   state.sent = true;
+  state.auditActive = false;
   state.demoSections = sections;
+  state.copyStatus = copyStatus || "";
   localUsbBlock = "";
   go("done");
   forget();
@@ -2778,12 +3093,19 @@ SCREENS.done = function () {
   var html =
     top() +
     "<h1>Köszönjük!</h1>" +
-    '<div class="success">Az adatok elmentek a vásárlónak. Az oldalt bezárhatod.</div>' +
-    "<p>Ezen az eszközön nem tároltunk semmit.</p>";
+    '<div class="success">Az összesített riportot elmentettük a private Sheetbe.</div>' +
+    (state.copyStatus === "sent"
+      ? "<p>Az összesített eladói email küldését a szerver visszaigazolta.</p>"
+      : state.copyStatus === "reader"
+        ? '<div class="note">A számítógépen futó reader most küldi az elején kért összesített emailt. A programot annak visszaigazolásáig hagyd nyitva.</div>'
+        : state.copyStatus === "missing"
+          ? '<div class="note warn">A böngészőlap újratöltése miatt az emailcím már nincs a memóriában, ezért email nem ment. A teljes riport a Sheetben megmaradt.</div>'
+          : "") +
+    "<p>Az átmeneti tesztadatokat töröltük. Az emailcímet nem mentjük el.</p>";
   if (state.demoSections) {
     html +=
       "<h2>" +
-      (DEMO ? "A webes teszt próba riportja" : "Elküldött webes riport") +
+      (DEMO ? "A webes teszt próba riportja" : "Összesített riport") +
       "</h2>" +
       sectionsHtml(state.demoSections);
   }

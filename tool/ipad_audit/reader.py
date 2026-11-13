@@ -1,7 +1,8 @@
-"""USB-s kiolvasó: az eredményt helyben megnyitott weboldalon jeleníti meg."""
+"""USB-s kiolvasó: riportküldés után az eladandó eszközön folytatódik a teszt."""
 import asyncio
 import argparse
 import re
+import secrets
 import sys
 
 from ipad_audit.report import MODELS
@@ -155,24 +156,56 @@ def usb_sections(raw):
 
 
 def main(argv=None):
-    from ipad_audit import config, reader_web
+    from ipad_audit import audit, config, reader_web
     from ipad_audit.backend import Backend, BackendError
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--code", default="")
+    parser.add_argument("--dev", action="store_true", help="A helyi dev szerver hálózati címét használja.")
+    parser.add_argument("--web-url", default="", help="Az iPadről elérhető webes alapcím, meghívókód nélkül.")
+    parser.add_argument("--monitor-timeout", type=float, default=1800, help="A webes teszt követésének időkorlátja másodpercben.")
     args = parser.parse_args(argv)
+    try:
+        web_url = reader_web.seller_base_url(dev=args.dev, base_url=args.web_url)
+    except ValueError as error:
+        print(str(error), file=sys.stderr)
+        return 1
     code = re.sub(r"[\s-]", "", args.code or input("A vásárlótól kapott meghívókód: ")).upper()
     if not re.fullmatch(r"(?:[0-9]{9}|[0-9A-Z]{12})", code):
         print("Hibás meghívókód.", file=sys.stderr)
         return 1
-    print("A program a modellt, serialt, hardverplatformot, rendszerverziót, tárhelyet, akkumulátoradatokat és az Aktiválási zár jelzését olvassa ki. A kiolvasás után a szerver automatikusan emailben elküldi ezeket a vásárlónak.", file=sys.stderr)
-    if input("Beleegyezel a kiolvasásba és az automatikus küldésbe? [igen/nem]: ").strip().lower() not in ("igen", "yes"):
+    if args.monitor_timeout <= 0:
+        print("A követési időkorlát legyen pozitív.", file=sys.stderr)
+        return 1
+    print("A program a modellt, serialt, hardverplatformot, rendszerverziót, tárhelyet, akkumulátoradatokat és az Aktiválási zár jelzését olvassa ki. Az eredményeket és a webes teszt lépéseit a vásárló private Sheetjébe mentjük. A vásárlónak nem küldünk emailt.", file=sys.stderr)
+    print("Ezután megpróbálja az audit oldalát az iPad vagy iPhone Safarijában megnyitni. Ehhez engedélyezett Web Inspector és nyitott audit oldal vagy üres Safari tab szükséges; más oldalt nem irányítunk át.", file=sys.stderr)
+    print("A Safari-megnyitási próba közben a könyvtár átmenetileg megkapja a nyitott inspectálható appok és tabok címét, URL-jét. Ezt nem mentjük, nem küldjük el; oldaltartalmat és böngészési előzményt nem kérünk le.", file=sys.stderr)
+    if input("Beleegyezel a kiolvasásba és a tesztadatok Sheetbe mentésébe? [Igen/nem, Enter: igen]: ").strip().lower() not in ("", "igen", "yes"):
         return 0
+    print("Szeretnéd a végén emailben megkapni az összesített riportot? Ha igen, add meg a címed; ha nem, nyomj Entert. A címet csak a program memóriájában tartjuk a teszt végéig.", file=sys.stderr)
+    while True:
+        copy_email = input("Email az összesített riporthoz (nem kötelező, Enter: nem kérem): ").strip()
+        if not copy_email or (
+            len(copy_email) <= 254
+            and not re.search(r"[^\x21-\x7e]", copy_email)
+            and re.fullmatch(r'[^\s@,;<>:"\\]+@[^\s@,;<>:"\\]+\.[^\s@,;<>:"\\]+', copy_email)
+        ):
+            break
+        print("Hibás emailcím. Adj meg egyetlen címet, vagy hagyd üresen.", file=sys.stderr)
 
     def notify(message):
         print(message, file=sys.stderr)
 
-    print("USB-kiolvasás, majd automatikus riportküldés.", file=sys.stderr)
+    backend = Backend(config.BACKEND_URL)
+    sid = secrets.token_hex(16).upper()
+    try:
+        backend.audit_begin(code, sid, email_requested=bool(copy_email))
+    except BackendError as error:
+        print("A tesztet nem sikerült elindítani: " + str(error), file=sys.stderr)
+        print("Az új flow a repositoryban lévő Apps Script új deploymentjét igényli.", file=sys.stderr)
+        pause()
+        return 1
+    print("USB-kiolvasás, majd mentés a private Sheetbe.", file=sys.stderr)
     try:
         raw = asyncio.run(read_raw(notify))
     except (TimeoutError, KeyboardInterrupt):
@@ -187,15 +220,33 @@ def main(argv=None):
     print("\nEzt találtuk az eszközödön:", file=sys.stderr)
     for line in summary_lines(raw):
         print("  " + line, file=sys.stderr)
-    sent = False
     try:
-        Backend(config.BACKEND_URL).report(code, "usb", facts(raw)["serial"] or "ismeretlen", usb_sections(raw))
-        sent = True
-        print("A szerver elküldte a USB-riportot a vásárlónak.", file=sys.stderr)
+        backend.audit_event(code, sid, 1, "usb", "ok", usb_sections(raw))
+        print("A USB-adatok mentését a szerver visszaigazolta. Email még nem ment el.", file=sys.stderr)
     except BackendError as error:
-        print("A USB-email küldése nem igazolt: " + str(error), file=sys.stderr)
-    reader_web.open_page(build_block(raw), code=code, usb_sent=sent)
-    return 0 if sent else 1
+        print("A USB-adatok mentése nem igazolt: " + str(error), file=sys.stderr)
+        pause()
+        return 1
+    print("A webes teszteket az iPaden vagy iPhone-on kell elvégezni. Megpróbálom ott megnyitni a Safarit...", file=sys.stderr)
+    if reader_web.open_on_device(code, base_url=web_url, sid=sid):
+        print("A Safari elfogadta az audit oldal megnyitását. A programot hagyd nyitva a teszt végéig.", file=sys.stderr)
+    else:
+        print("A Safarit nem sikerült automatikusan megnyitni. Az alábbi linkkel folytasd az iPaden.", file=sys.stderr)
+    heading = "A WEBES TESZTET AZ IPADEN VAGY IPHONE-ON FOLYTASD"
+    if sys.stderr.isatty():
+        heading = "\033[1m" + heading + "\033[0m"
+    print("\n" + "=" * 64, file=sys.stderr)
+    print(heading, file=sys.stderr)
+    print("=" * 64, file=sys.stderr)
+    print("Az eladandó eszközön nyisd meg a Safarit, és látogass el ide:\n", file=sys.stderr)
+    print(reader_web.public_seller_url(code, base_url=web_url, sid=sid), file=sys.stderr)
+    print("\nA link már tartalmazza a meghívókódot.", file=sys.stderr)
+    print("A számítógépen nem nyitunk böngészőt.", file=sys.stderr)
+    print("=" * 64 + "\n", file=sys.stderr)
+    result = audit.watch(backend, code, sid, copy_email, notify, timeout=args.monitor_timeout)
+    copy_email = ""
+    pause()
+    return 0 if result == "completed" else 1
 
 
 if __name__ == "__main__":

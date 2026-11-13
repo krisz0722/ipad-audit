@@ -1,127 +1,7 @@
 // A backend/Code.gs tesztje: az Apps Script szolgáltatásokat egyszerű hamis változatok helyettesítik, a valódi Code.gs fut.
 const test = require("node:test");
 const assert = require("node:assert");
-const fs = require("node:fs");
-const path = require("node:path");
-const vm = require("node:vm");
-const crypto = require("node:crypto");
-
-function makeBackend(label) {
-  const rows = [["Kód", "Címke", "Lejárat", "Állapot", "Utolsó esemény"]];
-  const cache = new Map();
-  const props = new Map();
-  const mails = [];
-  const dialogs = [];
-  const sheet = {
-    getDataRange: () => ({ getValues: () => rows.map((r) => r.slice()) }),
-    appendRow: (row) => {
-      rows.push(row);
-    },
-    setFrozenRows: () => {},
-    getRange: (row, col) => ({
-      getValue: () => rows[row - 1][col - 1],
-      setValue: (value) => {
-        rows[row - 1][col - 1] = value;
-      },
-    }),
-  };
-  const out = (text) => ({
-    text,
-    setMimeType() {
-      return this;
-    },
-  });
-  const ui = {
-    Button: { OK: "OK" },
-    ButtonSet: { OK_CANCEL: "OK_CANCEL" },
-    prompt: () => ({
-      getSelectedButton: () => "OK",
-      getResponseText: () => label || "Jófogás",
-    }),
-    showModalDialog: (html, title) => {
-      dialogs.push({ html: html.html, title });
-    },
-  };
-  const context = {
-    SpreadsheetApp: {
-      getActive: () => ({ getSheetByName: () => sheet }),
-      getUi: () => ui,
-    },
-    HtmlService: {
-      createHtmlOutput: (html) => ({
-        html,
-        setWidth() {
-          return this;
-        },
-        setHeight() {
-          return this;
-        },
-      }),
-    },
-    CacheService: {
-      getScriptCache: () => ({
-        get: (k) => (cache.has(k) ? cache.get(k) : null),
-        put: (k, v) => {
-          cache.set(k, String(v));
-        },
-      }),
-    },
-    PropertiesService: {
-      getScriptProperties: () => ({
-        getProperty: (k) => (props.has(k) ? props.get(k) : null),
-        setProperty: (k, v) => {
-          props.set(k, String(v));
-        },
-      }),
-    },
-    LockService: {
-      getScriptLock: () => ({ tryLock: () => true, releaseLock: () => {} }),
-    },
-    ContentService: {
-      MimeType: { JSON: "json" },
-      createTextOutput: (text) => out(text),
-    },
-    MailApp: {
-      getRemainingDailyQuota: () => 100,
-      sendEmail: (mail) => {
-        mails.push(mail);
-      },
-    },
-    Session: {
-      getEffectiveUser: () => ({ getEmail: () => "owner@example.test" }),
-    },
-    Utilities: {
-      DigestAlgorithm: { SHA_256: "sha256" },
-      getUuid: () => crypto.randomUUID(),
-      computeDigest: (_alg, text) =>
-        Array.from(crypto.createHash("sha256").update(text).digest()).map(
-          (b) => (b > 127 ? b - 256 : b),
-        ),
-      formatDate: (date) => date.toISOString().slice(0, 13),
-    },
-  };
-  vm.createContext(context);
-  vm.runInContext(
-    fs.readFileSync(path.join(__dirname, "..", "backend", "Code.gs"), "utf8"),
-    context,
-  );
-  const call = (body) =>
-    JSON.parse(
-      context.doPost({ postData: { contents: JSON.stringify(body) } }).text,
-    );
-  const invite = (code, status, hoursLeft) => {
-    rows.push([
-      code,
-      "próba",
-      new Date(
-        Date.now() + (hoursLeft === undefined ? 72 : hoursLeft) * 3600 * 1000,
-      ),
-      status || "új",
-      "",
-    ]);
-  };
-  return { call, invite, rows, mails, dialogs, context, props, cache };
-}
+const { makeBackend } = require("./helpers/backend.js");
 
 const SECTIONS = [
   {
@@ -135,12 +15,198 @@ const SECTIONS = [
 test("a deployment check jogosultságot ellenőriz, nem készít meghívót és nem küld emailt", () => {
   const backend = makeBackend();
   const result = backend.context.checkDeployment();
-  assert.strictEqual(result.version, "2026.11.13.1");
+  assert.strictEqual(result.version, "2026.11.13.2");
   assert.strictEqual(result.invitationSheetAvailable, true);
   assert.strictEqual(result.recipientAvailable, true);
   assert.strictEqual(result.remainingMailQuota, 100);
   assert.strictEqual(backend.rows.length, 1);
   assert.strictEqual(backend.mails.length, 0);
+});
+
+const AUDIT_SID = "0123456789ABCDEF0123456789ABCDEF";
+
+function beginAudit(backend, emailRequested = false) {
+  backend.invite("123456789");
+  const result = backend.call({
+    action: "audit_begin",
+    code: "123456789",
+    sid: AUDIT_SID,
+    kind: "ios",
+    emailRequested,
+    consent: true,
+  });
+  assert.strictEqual(result.ok, true, result.error);
+}
+
+test("audit: a USB- és webes eredmény a Sheetbe kerül email nélkül", () => {
+  const backend = makeBackend();
+  beginAudit(backend);
+  for (const [seq, step] of [
+    [1, "usb"],
+    [2, "start"],
+    [3, "finish"],
+  ]) {
+    const payload = {
+      action: "audit_event",
+      code: "123456789",
+      sid: AUDIT_SID,
+      seq,
+      step,
+      status: "ok",
+      sections: step === "start" ? [] : SECTIONS,
+    };
+    assert.strictEqual(backend.call(payload).ok, true);
+    assert.strictEqual(backend.call(payload).duplicate, true);
+  }
+  const status = backend.call({
+    action: "audit_status",
+    code: "123456789",
+    sid: AUDIT_SID,
+    after: 1,
+  });
+  assert.strictEqual(status.state, "completed");
+  assert.strictEqual(status.sections.length, 2);
+  assert.deepStrictEqual(
+    status.events.map((event) => event.seq),
+    [2, 3],
+  );
+  assert.strictEqual(backend.eventRows.length, 4);
+  assert.strictEqual(backend.rows[1][3], "teszt kész");
+  assert.strictEqual(backend.mails.length, 0);
+});
+
+test("audit: másik session nem olvashat, és a hiányzó lépés nem menthető", () => {
+  const backend = makeBackend();
+  beginAudit(backend);
+  assert.strictEqual(
+    backend.call({
+      action: "audit_status",
+      code: "123456789",
+      sid: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    }).ok,
+    false,
+  );
+  assert.strictEqual(
+    backend.call({
+      action: "audit_event",
+      code: "123456789",
+      sid: AUDIT_SID,
+      seq: 2,
+      step: "usb",
+      status: "ok",
+      sections: SECTIONS,
+    }).ok,
+    false,
+  );
+  assert.strictEqual(
+    backend.call({
+      action: "audit_event",
+      code: "123456789",
+      sid: AUDIT_SID,
+      seq: 1,
+      step: "finish",
+      status: "ok",
+      sections: SECTIONS,
+    }).ok,
+    false,
+  );
+  assert.strictEqual(backend.eventRows.length, 1);
+});
+
+function completeAudit(backend, emailRequested = true) {
+  beginAudit(backend, emailRequested);
+  for (const [seq, step, title] of [
+    [1, "usb", "USB-adatok"],
+    [2, "finish", "Webes tesztek"],
+  ]) {
+    const result = backend.call({
+      action: "audit_event",
+      code: "123456789",
+      sid: AUDIT_SID,
+      seq,
+      step,
+      status: "ok",
+      sections: [{ title, rows: SECTIONS[0].rows }],
+    });
+    assert.strictEqual(result.ok, true, result.error);
+  }
+}
+
+test("audit: egy összesített email csak az eladónak megy, címmentés nélkül", () => {
+  const backend = makeBackend();
+  completeAudit(backend);
+  const payload = {
+    action: "audit_email",
+    code: "123456789",
+    sid: AUDIT_SID,
+    email: "seller@example.test",
+  };
+  assert.strictEqual(backend.mails.length, 0);
+  assert.strictEqual(backend.call(payload).emailSent, true);
+  assert.strictEqual(backend.call(payload).duplicate, true);
+  assert.strictEqual(backend.mails.length, 1);
+  assert.strictEqual(backend.mails[0].to, "seller@example.test");
+  assert.strictEqual(backend.mails[0].bcc, undefined);
+  assert.strictEqual(backend.mails[0].cc, undefined);
+  assert.match(backend.mails[0].body, /USB-adatok/);
+  assert.match(backend.mails[0].body, /Webes tesztek/);
+  assert.match(backend.mails[0].body, /A teszt menete/);
+  assert.doesNotMatch(
+    JSON.stringify({
+      rows: backend.rows,
+      events: backend.eventRows,
+      cache: Array.from(backend.cache),
+      props: Array.from(backend.props),
+    }),
+    /seller@example\.test/,
+  );
+});
+
+test("audit: kérés nélkül, teszt közben vagy hibás címre nem küld emailt", () => {
+  const backend = makeBackend();
+  beginAudit(backend, true);
+  const payload = {
+    action: "audit_email",
+    code: "123456789",
+    sid: AUDIT_SID,
+    email: "seller@example.test",
+  };
+  assert.strictEqual(backend.call(payload).ok, false);
+  const declined = makeBackend();
+  completeAudit(declined, false);
+  assert.strictEqual(declined.call(payload).ok, false);
+  const completed = makeBackend();
+  completeAudit(completed);
+  for (const email of [
+    "",
+    "invalid",
+    "seller@example.test,other@example.test",
+    "seller@example.test\r\nBcc: other@example.test",
+  ])
+    assert.strictEqual(completed.call({ ...payload, email }).ok, false);
+  assert.strictEqual(
+    backend.mails.length + declined.mails.length + completed.mails.length,
+    0,
+  );
+});
+
+test("audit: bizonytalan emailküldés után nincs automatikus duplikálás", () => {
+  const backend = makeBackend();
+  completeAudit(backend);
+  let attempts = 0;
+  backend.context.MailApp.sendEmail = () => {
+    attempts++;
+    throw new Error("interrupted");
+  };
+  const payload = {
+    action: "audit_email",
+    code: "123456789",
+    sid: AUDIT_SID,
+    email: "seller@example.test",
+  };
+  assert.strictEqual(backend.call(payload).ok, false);
+  assert.strictEqual(backend.call(payload).ok, false);
+  assert.strictEqual(attempts, 1);
 });
 
 test("a report: ugyanaz a meghívó külön USB és webes emailt enged, retry nem duplikál", () => {

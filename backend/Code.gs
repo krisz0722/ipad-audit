@@ -1,7 +1,7 @@
 // iPad audit fogadó. Google Táblához kötött Apps Script.
 // Meghívó nélkül semmit nem fogad el és emailt sem küld.
 
-var BACKEND_VERSION = "2026.11.13.1";
+var BACKEND_VERSION = "2026.11.13.2";
 var SHEET_NAME = "Meghívók";
 var INVITE_HOURS = 72;
 var MAX_BODY = 60000;
@@ -13,6 +13,25 @@ var COLS = { code: 1, label: 2, expires: 3, status: 4, used: 5 };
 var CODE_DIGITS = 9;
 var MAX_FAILS_PER_HOUR = 30;
 var SITE_URL = "https://apple.audit.kokocloud.space/"; // Az eladói oldal címe, a meghívó linkje ebből készül.
+var AUDIT_COLUMNS = { sid: 7, kind: 8, emailRequested: 9, state: 10, mail: 11 };
+var AUDIT_STEPS = [
+  "usb",
+  "start",
+  "details",
+  "touch",
+  "motion",
+  "audio",
+  "rear",
+  "front",
+  "display",
+  "keyboard",
+  "pointer",
+  "review",
+  "skip",
+  "error",
+  "finish",
+  "cancel",
+];
 
 function onOpen() {
   SpreadsheetApp.getUi()
@@ -91,7 +110,7 @@ function inviteMessage_(code) {
     "\n\nA kód a linkben már benne van, nem kell beírnod.\n\n" +
     "A kód " +
     INVITE_HOURS +
-    " óráig érvényes, és egy USB-riporthoz, valamint egy webes tesztriporthoz használható."
+    " óráig érvényes, és egy teljes állapotellenőrzéshez használható. Az eredményeket lépésenként mentjük; a végén egy összesített riport készül. Emailt csak akkor kapsz, ha az elején kéred."
   );
 }
 
@@ -320,6 +339,347 @@ function finish_(body) {
   return json_({ ok: true });
 }
 
+function auditError_(message) {
+  var error = new Error(message);
+  error.audit = true;
+  throw error;
+}
+
+function auditCode_(body) {
+  var code = String(body.code || "")
+    .toUpperCase()
+    .replace(/[\s-]/g, "");
+  if (
+    !/^(?:[0-9]{9}|[0-9A-Z]{12})$/.test(code) ||
+    !/^[0-9A-F]{32}$/.test(body.sid || "")
+  )
+    auditError_("Hibás meghívó vagy tesztazonosító.");
+  return code;
+}
+
+function auditSession_(body) {
+  var code = auditCode_(body);
+  var sheet = sheet_();
+  var invite = findInvite_(sheet, code);
+  if (!invite || invite.values[AUDIT_COLUMNS.sid - 1] !== body.sid)
+    auditError_("A teszt session nem érvényes.");
+  if (new Date(invite.values[COLS.expires - 1]).getTime() < Date.now())
+    auditError_("A meghívókód lejárt.");
+  return { sheet: sheet, invite: invite, code: code, sid: body.sid };
+}
+
+function auditEventsSheet_() {
+  var book = SpreadsheetApp.getActive();
+  var sheet = book.getSheetByName("Tesztlépések");
+  if (!sheet) {
+    sheet = book.insertSheet("Tesztlépések");
+    sheet.appendRow([
+      "Session",
+      "Meghívó",
+      "Sorszám",
+      "Lépés",
+      "Eredmény",
+      "Riportadatok",
+      "Időpont",
+    ]);
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+function auditEvents_(session) {
+  return auditEventsSheet_()
+    .getDataRange()
+    .getValues()
+    .slice(1)
+    .filter(function (row) {
+      return row[0] === session.sid && String(row[1]) === session.code;
+    });
+}
+
+function auditSections_(value) {
+  if (!Array.isArray(value) || value.length > 12)
+    auditError_("Hibás riportadatok.");
+  var sections = value.map(function (section) {
+    if (
+      !section ||
+      typeof section.title !== "string" ||
+      section.title.length > 100 ||
+      !Array.isArray(section.rows) ||
+      section.rows.length > 60
+    )
+      auditError_("Hibás riportadatok.");
+    return {
+      title: section.title,
+      rows: section.rows.map(function (row) {
+        if (
+          !row ||
+          typeof row.label !== "string" ||
+          row.label.length > 100 ||
+          typeof row.value !== "string" ||
+          row.value.length > 1000 ||
+          typeof row.tag !== "string" ||
+          row.tag.length > 100 ||
+          ["ok", "warn", "bad", "info", "nodata"].indexOf(row.status) < 0
+        )
+          auditError_("Hibás riportadatok.");
+        return {
+          label: row.label,
+          value: row.value,
+          status: row.status,
+          tag: row.tag,
+        };
+      }),
+    };
+  });
+  if (JSON.stringify(sections).length > 45000)
+    auditError_("Túl nagy riportadat.");
+  return sections;
+}
+
+function auditBegin_(body) {
+  var code = auditCode_(body);
+  if (
+    body.consent !== true ||
+    (body.kind !== "ios" && body.kind !== "mac") ||
+    typeof body.emailRequested !== "boolean"
+  )
+    auditError_("A teszt indításához beleegyezés szükséges.");
+  var cache = CacheService.getScriptCache();
+  var failKey =
+    "fails:" + Utilities.formatDate(new Date(), "Etc/UTC", "yyyy-MM-dd-HH");
+  var fails = Number(cache.get(failKey) || 0);
+  if (fails >= MAX_FAILS_PER_HOUR)
+    auditError_("Túl sok hibás próbálkozás, próbáld újra egy óra múlva.");
+  var sheet = sheet_();
+  var invite = findInvite_(sheet, code);
+  if (!invite) {
+    cache.put(failKey, String(fails + 1), 3600);
+    auditError_("A meghívókód nem érvényes.");
+  }
+  if (new Date(invite.values[COLS.expires - 1]).getTime() < Date.now())
+    auditError_("A meghívókód lejárt.");
+  if (invite.values[AUDIT_COLUMNS.sid - 1] === body.sid)
+    return json_({ ok: true, sid: body.sid, duplicate: true });
+  if (invite.values[COLS.status - 1] !== "új")
+    auditError_("Ezt a meghívót már másik teszthez használják.");
+  [
+    "Session",
+    "Eszközfajta",
+    "Eladói emailt kér",
+    "Tesztállapot",
+    "Emailállapot",
+  ].forEach(function (name, index) {
+    sheet.getRange(1, index + 7).setValue(name);
+  });
+  sheet.getRange(invite.row, AUDIT_COLUMNS.sid).setValue(body.sid);
+  sheet.getRange(invite.row, AUDIT_COLUMNS.kind).setValue(body.kind);
+  sheet
+    .getRange(invite.row, AUDIT_COLUMNS.emailRequested)
+    .setValue(body.emailRequested);
+  sheet.getRange(invite.row, AUDIT_COLUMNS.state).setValue("running");
+  sheet.getRange(invite.row, AUDIT_COLUMNS.mail).setValue("not_sent");
+  sheet.getRange(invite.row, COLS.status).setValue("teszt folyamatban");
+  sheet.getRange(invite.row, COLS.used).setValue(new Date());
+  return json_({ ok: true, sid: body.sid });
+}
+
+function auditEvent_(body) {
+  var session = auditSession_(body);
+  if (
+    AUDIT_STEPS.indexOf(body.step) < 0 ||
+    ["started", "ok", "warn", "bad", "skipped", "unavailable", "error"].indexOf(
+      body.status,
+    ) < 0 ||
+    typeof body.seq !== "number" ||
+    body.seq % 1 !== 0 ||
+    body.seq < 1 ||
+    body.seq > 200
+  )
+    auditError_("Hibás tesztlépés.");
+  var sections = auditSections_(body.sections || []);
+  var events = auditEvents_(session);
+  var previous = events.filter(function (row) {
+    return Number(row[2]) === body.seq;
+  })[0];
+  if (previous) {
+    if (
+      previous[3] !== body.step ||
+      previous[4] !== body.status ||
+      previous[5] !== JSON.stringify(sections)
+    )
+      auditError_("A tesztlépés sorszáma már más adathoz tartozik.");
+    return json_({ ok: true, duplicate: true, seq: body.seq });
+  }
+  if (session.invite.values[AUDIT_COLUMNS.state - 1] !== "running")
+    auditError_("A teszt már lezárult.");
+  if (body.seq !== events.length + 1)
+    auditError_("Hiányzó tesztlépés; próbáld újra a korábbi kérést.");
+  if ((body.step === "usb" || body.step === "finish") && !sections.length)
+    auditError_("Hiányzó riportadatok.");
+  if (
+    body.step === "usb" &&
+    events.some(function (row) {
+      return row[3] === "usb";
+    })
+  )
+    auditError_("A USB-adatok már elmentve.");
+  if (
+    body.step === "finish" &&
+    session.invite.values[AUDIT_COLUMNS.kind - 1] === "ios" &&
+    !events.some(function (row) {
+      return row[3] === "usb";
+    })
+  )
+    auditError_("A végső riporthoz előbb USB-kiolvasás szükséges.");
+  auditEventsSheet_().appendRow([
+    session.sid,
+    session.code,
+    body.seq,
+    body.step,
+    body.status,
+    JSON.stringify(sections),
+    new Date(),
+  ]);
+  if (body.step === "finish" || body.step === "cancel") {
+    session.sheet
+      .getRange(session.invite.row, AUDIT_COLUMNS.state)
+      .setValue(body.step === "finish" ? "completed" : "interrupted");
+    session.sheet
+      .getRange(session.invite.row, COLS.status)
+      .setValue(body.step === "finish" ? "teszt kész" : "teszt megszakadt");
+  }
+  session.sheet.getRange(session.invite.row, COLS.used).setValue(new Date());
+  return json_({ ok: true, seq: body.seq, saved: true });
+}
+
+function auditStatus_(body) {
+  var session = auditSession_(body);
+  var after = body.after === undefined ? 0 : body.after;
+  if (typeof after !== "number" || after % 1 !== 0 || after < 0)
+    auditError_("Hibás sorszám.");
+  var events = auditEvents_(session);
+  var usbSections = [];
+  var webSections = [];
+  events.forEach(function (row) {
+    var sections = JSON.parse(row[5]);
+    if (row[3] === "usb") usbSections = sections;
+    else if (sections.length) webSections = sections;
+  });
+  return json_({
+    ok: true,
+    state: session.invite.values[AUDIT_COLUMNS.state - 1],
+    emailRequested:
+      session.invite.values[AUDIT_COLUMNS.emailRequested - 1] === true,
+    mailState: session.invite.values[AUDIT_COLUMNS.mail - 1],
+    seq: events.length,
+    sections: usbSections.concat(webSections),
+    events: events
+      .filter(function (row) {
+        return Number(row[2]) > after;
+      })
+      .map(function (row) {
+        return { seq: row[2], step: row[3], status: row[4], time: row[6] };
+      }),
+  });
+}
+
+function auditEmail_(body) {
+  var session = auditSession_(body);
+  if (
+    ["completed", "interrupted"].indexOf(
+      session.invite.values[AUDIT_COLUMNS.state - 1],
+    ) < 0
+  )
+    auditError_("A teszt még nem ért véget.");
+  if (session.invite.values[AUDIT_COLUMNS.emailRequested - 1] !== true)
+    auditError_("Az eladó nem kért emailriportot.");
+  if (typeof body.email !== "string") auditError_("Hibás emailcím.");
+  var email = body.email.trim();
+  if (
+    !email ||
+    email.length > 254 ||
+    /[^\x21-\x7e]/.test(email) ||
+    !/^[^\s@,;<>:"\\]+@[^\s@,;<>:"\\]+\.[^\s@,;<>:"\\]+$/.test(email)
+  )
+    auditError_("Hibás emailcím.");
+  var mailState = session.invite.values[AUDIT_COLUMNS.mail - 1];
+  if (mailState === "sent")
+    return json_({ ok: true, duplicate: true, emailSent: true });
+  if (mailState === "sending")
+    auditError_(
+      "Az emailküldés eredménye bizonytalan. Ellenőrizd a postaládát; nem küldjük újra automatikusan.",
+    );
+  var props = PropertiesService.getScriptProperties();
+  var dayKey =
+    "mails:" + Utilities.formatDate(new Date(), "Etc/UTC", "yyyy-MM-dd");
+  var count = Number(props.getProperty(dayKey) || 0);
+  if (count >= DAILY_MAILS || MailApp.getRemainingDailyQuota() < 1)
+    auditError_(
+      "Elérte a napi emailkeretet. Az eredmények a Sheetben megmaradtak.",
+    );
+  var state = JSON.parse(
+    auditStatus_({ code: session.code, sid: session.sid }).getContent(),
+  );
+  var content = render_(state.sections);
+  var log = {
+    title: "A teszt menete",
+    rows: state.events.map(function (event) {
+      return {
+        label: event.step,
+        value: event.status,
+        status: "info",
+        tag: String(event.time),
+      };
+    }),
+  };
+  var logContent = render_([log]);
+  var label = String(session.invite.values[COLS.label - 1] || "")
+    .replace(/[\r\n]/g, " ")
+    .slice(0, 80);
+  session.sheet
+    .getRange(session.invite.row, AUDIT_COLUMNS.mail)
+    .setValue("sending");
+  props.setProperty(dayKey, String(count + 1));
+  try {
+    MailApp.sendEmail({
+      to: email,
+      subject:
+        "iPad audit " +
+        (state.state === "completed"
+          ? "összesített riport: "
+          : "befejezetlen riport: ") +
+        label,
+      body: content.text + logContent.text,
+      htmlBody: content.html + logContent.html,
+    });
+    session.sheet
+      .getRange(session.invite.row, AUDIT_COLUMNS.mail)
+      .setValue("sent");
+    return json_({ ok: true, emailSent: true });
+  } catch (error) {
+    auditError_(
+      "Az emailküldés eredménye bizonytalan. Ellenőrizd a postaládát; nem küldjük újra automatikusan.",
+    );
+  }
+}
+
+function auditDispatch_(body) {
+  try {
+    if (body.action === "audit_begin") return auditBegin_(body);
+    if (body.action === "audit_event") return auditEvent_(body);
+    if (body.action === "audit_status") return auditStatus_(body);
+    if (body.action === "audit_email") return auditEmail_(body);
+    return fail_("Ismeretlen tesztművelet.");
+  } catch (error) {
+    return fail_(
+      error.audit
+        ? error.message
+        : "A teszt mentése nem sikerült. Próbáld újra.",
+    );
+  }
+}
+
 function report_(body) {
   var code = String(body.code || "")
     .trim()
@@ -453,6 +813,8 @@ function doPost(e) {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(15000)) return fail_("Foglalt, próbáld újra.");
   try {
+    if (typeof body.action === "string" && body.action.indexOf("audit_") === 0)
+      return auditDispatch_(body);
     if (body.action === "report") return report_(body);
     if (body.action === "start") return start_(body);
     if (body.action === "step") return step_(body);

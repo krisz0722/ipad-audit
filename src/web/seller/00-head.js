@@ -11,7 +11,9 @@
   var DEMO = /^DEMO(-|$)/.test(hash);
   var DEMO_ID = /^DEMO-/.test(hash) ? hash.slice(5).toLowerCase() : '';
   var CODE_PATTERN = /^(?:[0-9]{9}|[0-9A-Z]{12})$/;
-  var CODE = CODE_PATTERN.test(hash) ? hash : '';
+  var inviteHash = hash.match(/^([0-9]{9}|[0-9A-Z]{12})(?:\.([0-9A-F]{32}))?$/);
+  var CODE = inviteHash ? inviteHash[1] : '';
+  var LINK_SID = inviteHash && inviteHash[2] ? inviteHash[2] : '';
   var usbDelivery = window.USB_READER_DATA || {};
   if (CODE_PATTERN.test(usbDelivery.code || '')) CODE = usbDelivery.code;
   var MAX_FILE = 50 * 1024 * 1024;
@@ -47,7 +49,7 @@
   // A letöltési mappa: a GitHub release legfrissebb kiadása. A config.js-ben a USB_TOOL_URL felülírhatja.
   var TOOL_BASE = window.USB_TOOL_URL || 'https://github.com/krisz0722/ipad-audit/releases/latest/download/';
   function pageAddress() {
-    return location.origin + location.pathname + (DEMO ? '#DEMO' : (CODE ? '#' + CODE : ''));
+    return location.origin + location.pathname + (DEMO ? '#DEMO' : (CODE ? '#' + CODE + (state.auditSid ? '.' + state.auditSid : '') : ''));
   }
 
   // Csak olvas, nem ír, nem csatlakozik a hálózatra. A profiles kimenetéből csak a két igen/nem sor jön át,
@@ -69,6 +71,13 @@
     shareSerial: true, apple: '', sid: '', sending: false, sent: false, noLog: false, demoSections: null,
     hw: {}, hwSkipped: false
   };
+  state.auditSid = LINK_SID;
+  state.auditSeq = 0;
+  state.auditQueue = [];
+  state.auditActive = false;
+  state.auditConsent = false;
+  state.auditSource = LINK_SID ? 'reader' : '';
+  state.auditEmailRequested = false;
 
   var SCREENS = {};
 

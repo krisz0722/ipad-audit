@@ -70,7 +70,10 @@ function top() {
   return (
     '<div class="top"><span class="brand">Eszköz-ellenőrzés</span>' +
     (DEMO ? '<span class="demo">Próbaüzem: semmi nem megy el</span>' : "") +
-    "</div>"
+    "</div>" +
+    (state.auditActive
+      ? '<p class="muted" id="audit-status" role="status">A teszt lépéseit a private Sheetbe mentjük.</p>'
+      : "")
   );
 }
 function progress(n) {

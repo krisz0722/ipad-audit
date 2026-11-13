@@ -344,6 +344,7 @@ pre.code {
   font-weight: 400;
 }
 .field input[type="text"],
+.field input[type="email"],
 .field input[type="number"],
 .field textarea,
 .field select {

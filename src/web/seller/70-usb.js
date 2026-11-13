@@ -44,7 +44,7 @@ SCREENS.usb_get = function () {
     '<a href="https://github.com/krisz0722/ipad-audit/blob/main/tool/ipad_audit/reader.py" target="_blank" rel="noopener">a GitHubon</a> és ' +
     '<a href="https://gitlab.com/krisz0722/ipad-audit/-/blob/main/tool/ipad_audit/reader.py" target="_blank" rel="noopener">a GitLabon</a>.</li>' +
     "<li><b>Csak olvas.</b> Semmit nem módosít az eszközön.</li>" +
-    "<li><b>Előzetes beleegyezés.</b> A program a kiolvasás előtt kéri a meghívókódot és a beleegyezésedet. Utána a kiolvasott adatokat automatikusan elküldeti a vásárlónak emailben, majd megnyitja az oldalt a visszaigazolással.</li>" +
+    "<li><b>Előzetes beleegyezés.</b> A program a kiolvasás előtt kéri a meghívókódot és a beleegyezésedet. Az USB-adatokat a vásárló private Sheetjébe mentjük, majd az iPaden vagy iPhone-on folytatod a tesztet. Az elején egyszer kérhetsz összesített emailriportot saját magadnak; a vásárlónak nem küldünk emailt.</li>" +
     '<li><b>Ellenőrizhető letöltés.</b> A fájlt a GitHub építi a nyilvános kódból (<a href="https://github.com/krisz0722/ipad-audit/actions" target="_blank" rel="noopener">a build naplója</a>), ' +
     'a <a href="https://github.com/krisz0722/ipad-audit/releases/latest" target="_blank" rel="noopener">kiadás oldalán</a> minden fájl mellett ott az ellenőrző összeg (.sha256).</li>' +
     "</ul></div>";
@@ -90,9 +90,10 @@ SCREENS.usb_run = function () {
       "<li>" +
       runStep +
       "</li>" +
-      "<li>A programban add meg a meghívókódot, és hagyd jóvá az automatikus USB-riportküldést. A kiolvasás után az első email elmegy, a program pedig megnyitja az oldalt. A webes teszteket az eladandó eszközön folytasd.</li>" +
+      "<li>A programban add meg a meghívókódot, és hagyd jóvá a tesztadatok Sheetbe mentését. Ha a végén összesített emailriportot kérsz, itt egyszer megadhatod az emailcímedet.</li>" +
+      "<li>A kiolvasás mentése után a program megpróbálja az audit oldalát az iPaden vagy iPhone-on megnyitni. Ehhez engedélyezett Web Inspector és nyitott audit oldal vagy üres Safari tab szükséges. Ha ez nem sikerül, a programban kiemelten megjelenő teljes folytatólinket nyisd meg az eladandó eszköz Safarijában.</li>" +
       "</ol>" +
-      '<div class="note">A programot hagyd futni, amíg az oldalon dolgozol.</div>' +
+      '<div class="note">A webes teszteket az eladandó iPaden vagy iPhone-on végezd, ne a számítógépen. A readert hagyd nyitva a teljes webes teszt és a kért email visszaigazolásának végéig: a programban látod a mentett lépéseket.</div>' +
       foot()
   );
 };
@@ -103,8 +104,8 @@ SCREENS.usb_result = function () {
       progress(2) +
       "<h1>Kiolvasott adatok</h1>" +
       (usbDelivery.sent
-        ? '<div class="success">A szerver elküldte a USB-riportot a vásárlónak.</div>'
-        : '<div class="note warn">A USB-email küldése nincs visszaigazolva. Ellenőrizd a program üzenetét.</div>') +
+        ? '<div class="success">A szerver visszaigazolta az USB-adatok mentését.</div>'
+        : '<div class="note warn">Ellenőrizd a readerben, hogy a szerver visszaigazolta-e az USB-adatok mentését.</div>') +
       '<div id="result"></div>' +
       foot()
   );
@@ -112,10 +113,7 @@ SCREENS.usb_result = function () {
 };
 
 function publicSellerAddress() {
-  return (
-    "https://apple.audit.kokocloud.space/" +
-    (DEMO ? "#DEMO" : CODE ? "#" + CODE : "")
-  );
+  return pageAddress();
 }
 
 SCREENS.web_intro = function () {
@@ -123,7 +121,8 @@ SCREENS.web_intro = function () {
     top() +
       progress(2) +
       "<h1>USB-kiolvasás, majd webes tesztek</h1>" +
-      '<ol class="steps"><li>A számítógépen letöltöd és lefuttatod a kiolvasót. A program a beleegyezésed után automatikusan elküldi a USB-riportot.</li><li>Ezután az eladandó iPaden vagy iPhone-on visszatérsz erre az oldalra, és elvégzed a webes teszteket.</li><li>A tesztek végén egy külön webes riportot küldesz.</li></ol>' +
+      '<ol class="steps"><li>A reader a beleegyezésed után a USB-adatokat a vásárló private Sheetjébe menti.</li><li>Ezen az iPaden vagy iPhone-on elvégzed a webes teszteket; az eredményeket lépésenként mentjük.</li><li>A végén összesített riport készül. Ha a reader elején kérted, azt egyszer emailben is megkapod. A readert hagyd nyitva.</li></ol>' +
+      '<label class="check"><input type="checkbox" id="audit-consent"> Beleegyezem a webes teszt lépéseinek, rész-eredményeinek és hibajelzéseinek folyamatos mentésébe a vásárló private Sheetjében.</label><div id="msg"></div>' +
       choice(
         "web-download",
         "A kiolvasó letöltése",
@@ -142,7 +141,7 @@ SCREENS.web_intro = function () {
     go("usb_switch");
   });
   on("web-start", function () {
-    go("details");
+    auditOpen("details", false);
   });
 };
 
@@ -151,10 +150,11 @@ SCREENS.usb_web_continue = function () {
     top() +
       "<h1>Folytasd az eladandó eszközön</h1>" +
       "<p>Az iPad vagy iPhone webes tesztjeit azon az eszközön kell elvégezni. Térj vissza az ott megnyitott oldalra, és válaszd a folytatást.</p>" +
+      "<p>Az iPaden vagy iPhone-on a readerben megjelenő teljes folytatólinket nyisd meg. Az a meghívókódot és a teszt sessionazonosítóját is tartalmazza; egyiket sem kell külön beírnod.</p>" +
       '<p><a href="' +
       esc(publicSellerAddress()) +
       '">A webes tesztek oldala, a meghívóddal</a></p>' +
-      '<p class="muted">A számítógép kameráját vagy kijelzőjét nem teszteljük az iPad helyett. A webes tesztek végén külön email készül.</p>' +
+      '<p class="muted">A számítógép kameráját vagy kijelzőjét nem teszteljük az iPad helyett. Az eredményeket folyamatosan mentjük; email csak a teszt végén készül, ha az elején kérted.</p>' +
       foot()
   );
 };
@@ -169,7 +169,7 @@ SCREENS.usb_switch = function () {
       esc(publicSellerAddress()) +
       "</pre>" +
       '<button type="button" class="btn small" id="copy-addr">Cím másolása</button><span class="muted" id="copied-addr"></span>' +
-      '<div class="note">A meghívókód a címben benne van. A számítógépen töltsd le és futtasd a kiolvasót. Az automatikus USB-email után ezen az eszközön térj vissza, és folytasd a webes tesztekkel.</div>' +
+      '<div class="note">A meghívókód a címben benne van. A számítógépen töltsd le és futtasd a kiolvasót. Ezután a reader teljes folytatólinkjével térj vissza erre az eszközre. A readert hagyd nyitva a teszt végéig.</div>' +
       foot()
   );
   on("copy-addr", function () {
