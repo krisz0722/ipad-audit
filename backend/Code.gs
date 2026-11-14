@@ -1,7 +1,7 @@
 // iPad audit fogadó. Google Táblához kötött Apps Script.
 // Meghívó nélkül semmit nem fogad el és emailt sem küld.
 
-var BACKEND_VERSION = "2026.11.14.2";
+var BACKEND_VERSION = "2026.11.14.3";
 var SHEET_NAME = "Meghívók";
 var INVITE_HOURS = 72;
 var MAX_BODY = 60000;
@@ -48,13 +48,18 @@ function sheet_() {
     sheet = book.insertSheet(SHEET_NAME);
     sheet.appendRow([
       "Kód",
-      "Címke",
+      "Megadott név",
       "Lejárat",
       "Állapot",
       "Utolsó esemény",
       "Link",
     ]);
     sheet.setFrozenRows(1);
+  } else if (typeof sheet.getRange === "function") {
+    var valB1 = sheet.getRange(1, 2).getValue();
+    if (valB1 === "Címke") {
+      sheet.getRange(1, 2).setValue("Megadott név");
+    }
   }
   return sheet;
 }
@@ -141,13 +146,16 @@ function newInvite() {
   var ui = SpreadsheetApp.getUi();
   var answer = ui.prompt(
     "Új meghívó",
-    "Kinek szól? (pl. Jófogás, Air 2)",
+    "Eladó neve vagy megnevezése (pl. Kovács János, Jófogás, Air 2):",
     ui.ButtonSet.OK_CANCEL,
   );
   if (answer.getSelectedButton() !== ui.Button.OK) return;
   var code = randomDigits_(CODE_DIGITS);
   var expires = new Date(Date.now() + INVITE_HOURS * 3600 * 1000);
   var sheet = sheet_();
+  if (sheet.getRange(1, 2).getValue() === "Címke") {
+    sheet.getRange(1, 2).setValue("Megadott név");
+  }
   if (!sheet.getRange(1, 6).getValue()) sheet.getRange(1, 6).setValue("Link");
   sheet.appendRow([
     code,
@@ -240,6 +248,7 @@ function start_(body) {
   saveSession_(sid, {
     row: invite.row,
     label: invite.values[COLS.label - 1],
+    code: code,
     steps: {},
     mailed: false,
   });
@@ -337,6 +346,7 @@ function finish_(body) {
   var sheet = sheet_();
   sheet.getRange(session.row, COLS.status).setValue("riport elküldve");
   sheet.getRange(session.row, COLS.used).setValue(new Date());
+  createReportTab_(session.code || "", session.label || "", body.sections || []);
   return json_({ ok: true });
 }
 
@@ -409,6 +419,77 @@ function auditEvents_(session) {
     .filter(function (row) {
       return row[0] === session.sid && String(row[1]) === session.code;
     });
+}
+
+function reportTabName_(code, label) {
+  var cleanLabel = String(label || "")
+    .replace(/[:\\/?*\[\]]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 25);
+  var title = cleanLabel
+    ? ("Riport - " + cleanLabel + " - " + code)
+    : ("Riport - " + code);
+  return title.slice(0, 80);
+}
+
+function createReportTab_(code, label, sections) {
+  var book = SpreadsheetApp.getActive();
+  if (!book) return null;
+
+  var cleanCode = String(code || "").trim();
+  var cleanName = String(label || "").trim();
+  var tabName = reportTabName_(cleanCode, cleanName);
+
+  var sheet = book.getSheetByName(tabName);
+  if (!sheet) {
+    sheet = book.insertSheet(tabName);
+  } else {
+    if (typeof sheet.clear === "function") sheet.clear();
+  }
+
+  var headers = [
+    "Generált kód",
+    "Megadott név",
+    "Szakasz",
+    "Vizsgált tétel",
+    "Mért érték",
+    "Állapot",
+    "Adatforrás",
+    "Időpont",
+  ];
+  sheet.appendRow(headers);
+  if (typeof sheet.setFrozenRows === "function") sheet.setFrozenRows(1);
+  if (typeof sheet.getRange === "function") {
+    var headerRange = sheet.getRange(1, 1, 1, headers.length);
+    if (headerRange && typeof headerRange.setFontWeight === "function") {
+      headerRange.setFontWeight("bold");
+    }
+  }
+
+  var now = new Date();
+  if (Array.isArray(sections)) {
+    for (var s = 0; s < sections.length; s++) {
+      var section = sections[s];
+      if (!section || !Array.isArray(section.rows)) continue;
+      var title = String(section.title || "");
+      for (var r = 0; r < section.rows.length; r++) {
+        var row = section.rows[r];
+        if (!row) continue;
+        sheet.appendRow([
+          cleanCode,
+          cleanName,
+          title,
+          String(row.label || ""),
+          String(row.value || ""),
+          String(row.status || ""),
+          String(row.tag || ""),
+          now,
+        ]);
+      }
+    }
+  }
+  return sheet;
 }
 
 function auditSections_(value) {
@@ -571,6 +652,22 @@ function auditEvent_(body) {
     session.sheet
       .getRange(session.invite.row, COLS.status)
       .setValue(body.step === "finish" ? "teszt kész" : "teszt megszakadt");
+    if (body.step === "finish") {
+      var usbSections = [];
+      var webSections = sections || [];
+      events.forEach(function (row) {
+        var s = JSON.parse(row[5]);
+        if (row[3] === "usb") usbSections = s;
+        else if (row[3] !== "start" && s.length && !webSections.length)
+          webSections = s;
+      });
+      var allSections = usbSections.concat(webSections);
+      createReportTab_(
+        session.code,
+        session.invite.values[COLS.label - 1],
+        allSections,
+      );
+    }
   }
   session.sheet.getRange(session.invite.row, COLS.used).setValue(new Date());
   return json_({ ok: true, seq: body.seq, saved: true });
@@ -1202,6 +1299,7 @@ function report_(body) {
       .getRange(invite.row, COLS.status)
       .setValue(other === "sent" ? "riportok elküldve" : "részriport elküldve");
     sheet.getRange(invite.row, COLS.used).setValue(new Date());
+    createReportTab_(code, label, body.sections || []);
     return json_({ ok: true, kind: kind, copySent: Boolean(copyEmail) });
   } catch (error) {
     return fail_(

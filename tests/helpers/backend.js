@@ -4,7 +4,7 @@ const vm = require("node:vm");
 const crypto = require("node:crypto");
 
 function makeBackend(label) {
-  const rows = [["Kód", "Címke", "Lejárat", "Állapot", "Utolsó esemény"]];
+  const rows = [["Kód", "Megadott név", "Lejárat", "Állapot", "Utolsó esemény"]];
   const cache = new Map();
   const props = new Map();
   const mails = [];
@@ -14,8 +14,9 @@ function makeBackend(label) {
     appendRow: (row) => rows.push(row),
     setFrozenRows: () => {},
     getRange: (row, column) => ({
-      getValue: () => rows[row - 1][column - 1],
+      getValue: () => rows[row - 1]?.[column - 1],
       setValue: (value) => {
+        if (!rows[row - 1]) rows[row - 1] = [];
         rows[row - 1][column - 1] = value;
       },
     }),
@@ -46,18 +47,30 @@ function makeBackend(label) {
       getActive: () => ({
         getSheetByName: (name) => sheets.get(name) || null,
         insertSheet: (name) => {
-          const target = name === "Akku mérés" ? batteryRows : eventRows;
+          const sheetRows = [];
+          const target =
+            name === "Akku mérés"
+              ? batteryRows
+              : name === "Tesztlépések"
+                ? eventRows
+                : sheetRows;
           const created = {
+            rows: target,
+            clear: () => {
+              target.length = 0;
+            },
             appendRow: (row) => target.push(row),
             setFrozenRows: () => {},
             getDataRange: () => ({
               getValues: () => target.map((row) => row.slice()),
             }),
             getRange: (row, column) => ({
-              getValue: () => target[row - 1][column - 1],
+              getValue: () => target[row - 1]?.[column - 1],
               setValue: (value) => {
+                if (!target[row - 1]) target[row - 1] = [];
                 target[row - 1][column - 1] = value;
               },
+              setFontWeight: () => {},
             }),
           };
           sheets.set(name, created);
@@ -147,6 +160,7 @@ function makeBackend(label) {
     cache,
     eventRows,
     batteryRows,
+    sheets,
   };
 }
 

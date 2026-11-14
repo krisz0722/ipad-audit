@@ -15,7 +15,7 @@ const SECTIONS = [
 test("a deployment check jogosultságot ellenőriz, nem készít meghívót és nem küld emailt", () => {
   const backend = makeBackend();
   const result = backend.context.checkDeployment();
-  assert.strictEqual(result.version, "2026.11.14.2");
+  assert.strictEqual(result.version, "2026.11.14.3");
   assert.strictEqual(result.invitationSheetAvailable, true);
   assert.strictEqual(result.recipientAvailable, true);
   assert.strictEqual(result.remainingMailQuota, 100);
@@ -73,6 +73,15 @@ test("audit: a USB- és webes eredmény a Sheetbe kerül email nélkül", () => 
   assert.strictEqual(backend.eventRows.length, 4);
   assert.strictEqual(backend.rows[1][3], "teszt kész");
   assert.strictEqual(backend.mails.length, 0);
+
+  const reportSheet = backend.sheets.get("Riport - próba - 123456789");
+  assert.ok(reportSheet, "a riport tab létrejön a teszt végén");
+  assert.strictEqual(reportSheet.rows[0][0], "Generált kód");
+  assert.strictEqual(reportSheet.rows[0][1], "Megadott név");
+  assert.strictEqual(reportSheet.rows[0][2], "Szakasz");
+  assert.strictEqual(reportSheet.rows[1][0], "123456789");
+  assert.strictEqual(reportSheet.rows[1][1], "próba");
+  assert.ok(reportSheet.rows.length > 1, "a mérési sorok bekerülnek a riport tabba");
 });
 
 test("audit: az akkumulátor-terhelésteszt mintái az Akku mérés munkalapra, az összefoglaló az összesített riportba kerül", () => {
