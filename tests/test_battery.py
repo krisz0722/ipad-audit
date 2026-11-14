@@ -150,3 +150,59 @@ def test_backend_audit_battery_method(monkeypatch):
     )
     assert requests[0]["action"] == "audit_battery"
     assert requests[0]["samples"] == [{"sec": 0, "level": 75}]
+
+
+def test_collect_samples_reports_usb_buttons_audio_and_hw_diagnostics():
+    from ipad_audit.signals import Signals
+
+    messages = []
+    now = [0.0]
+    signals = Signals()
+    signals.feed("VolumeIncrement page:0xC usage:0xE9 downEvent:1", now=0.5)
+    signals.feed("Acc (type 0): 0.0 0.0 0.0", now=0.5)
+    signals.feed("Acc (type 0): 0.5 0.0 0.0", now=0.6)
+    signals.feed("Rssi: -52", now=0.7)
+
+    async def wait(seconds):
+        now[0] += seconds
+
+    async def sampler(sec):
+        return {
+            "sec": sec,
+            "level": 70,
+            "voltageMv": 4000,
+            "tempC": 36.0,
+            "cycles": 50,
+            "charging": False,
+            "currentMa": -500,
+            "audioRunning": True,
+        }
+
+    section = asyncio.run(
+        battery_test.collect_samples(
+            minutes=0.02,
+            interval=1,
+            notify=messages.append,
+            on_batch=lambda batch, sec: True,
+            sampler=sampler,
+            clock=lambda: now[0],
+            wait=wait,
+            signals=signals,
+            hw_diag={
+                "BasebandVersion": "10.0.1",
+                "SIMStatus": "kCTSIMSupportSIMStatusReady",
+                "nand_status": "Ready",
+                "touch_matrix": "32 x 24 (reset: 0)",
+                "touch_id": "érzékelve",
+            },
+        )
+    )
+    assert any("Hangerő fel megnyomva" in msg for msg in messages)
+    assert any("Hangkimenet aktív" in msg for msg in messages)
+    rows = {row["label"]: row["value"] for row in section["rows"]}
+    assert "aktív" in rows["Videó / hangkimenet (USB)"]
+    assert "Hangerő fel megnyomva" in rows["Fizikai gombok (USB)"]
+    assert "0.50 g" in rows["Gyorsulásmérő (USB)"]
+    assert "-52 – -52 dBm" in rows["Wi-Fi jelerősség (USB)"]
+    assert "SIM behelyezve, kész" in rows["Mobilhálózat és SIM (USB)"]
+    assert "NAND: Ready" in rows["Belső vezérlők (USB)"]

@@ -345,27 +345,40 @@ function auditError_(message) {
   throw error;
 }
 
-function auditCode_(body) {
+function auditCode_(body, allowEmptySid) {
   var code = String(body.code || "")
     .toUpperCase()
     .replace(/[\s-]/g, "");
   if (
     !/^(?:[0-9]{9}|[0-9A-Z]{12})$/.test(code) ||
-    !/^[0-9A-F]{32}$/.test(body.sid || "")
+    (!allowEmptySid && !/^[0-9A-F]{32}$/.test(body.sid || "")) ||
+    (allowEmptySid && body.sid && !/^[0-9A-F]{32}$/.test(body.sid))
   )
     auditError_("Hibás meghívó vagy tesztazonosító.");
   return code;
 }
 
-function auditSession_(body) {
-  var code = auditCode_(body);
+function auditSession_(body, allowCodeOnly) {
+  var code = auditCode_(body, allowCodeOnly);
+  var cache = CacheService.getScriptCache();
+  var failKey =
+    "fails:" + Utilities.formatDate(new Date(), "Etc/UTC", "yyyy-MM-dd-HH");
+  var fails = Number(cache.get(failKey) || 0);
+  if (!body.sid && allowCodeOnly && fails >= MAX_FAILS_PER_HOUR)
+    auditError_("Túl sok hibás próbálkozás, próbáld újra egy óra múlva.");
   var sheet = sheet_();
   var invite = findInvite_(sheet, code);
-  if (!invite || invite.values[AUDIT_COLUMNS.sid - 1] !== body.sid)
+  if (!invite) {
+    if (!body.sid && allowCodeOnly) cache.put(failKey, String(fails + 1), 3600);
+    auditError_("A teszt session nem érvényes.");
+  }
+  var inviteSid = String(invite.values[AUDIT_COLUMNS.sid - 1] || "");
+  var sid = body.sid ? String(body.sid) : allowCodeOnly ? inviteSid : "";
+  if (!inviteSid || inviteSid !== sid)
     auditError_("A teszt session nem érvényes.");
   if (new Date(invite.values[COLS.expires - 1]).getTime() < Date.now())
     auditError_("A meghívókód lejárt.");
-  return { sheet: sheet, invite: invite, code: code, sid: body.sid };
+  return { sheet: sheet, invite: invite, code: code, sid: sid };
 }
 
 function auditEventsSheet_() {
@@ -542,6 +555,11 @@ function auditEvent_(body) {
     new Date(),
   ]);
   if (body.step === "finish" || body.step === "cancel") {
+    if (body.step === "finish" && body.emailRequested === true) {
+      session.sheet
+        .getRange(session.invite.row, AUDIT_COLUMNS.emailRequested)
+        .setValue(true);
+    }
     session.sheet
       .getRange(session.invite.row, AUDIT_COLUMNS.state)
       .setValue(body.step === "finish" ? "completed" : "interrupted");
@@ -554,7 +572,7 @@ function auditEvent_(body) {
 }
 
 function auditStatus_(body) {
-  var session = auditSession_(body);
+  var session = auditSession_(body, true);
   var after = body.after === undefined ? 0 : body.after;
   if (typeof after !== "number" || after % 1 !== 0 || after < 0)
     auditError_("Hibás sorszám.");
@@ -568,6 +586,7 @@ function auditStatus_(body) {
   });
   return json_({
     ok: true,
+    sid: session.sid,
     state: session.invite.values[AUDIT_COLUMNS.state - 1],
     emailRequested:
       session.invite.values[AUDIT_COLUMNS.emailRequested - 1] === true,
@@ -662,6 +681,157 @@ function auditEmail_(body) {
       "Az emailküldés eredménye bizonytalan. Ellenőrizd a postaládát; nem küldjük újra automatikusan.",
     );
   }
+}
+
+function auditBatterySheet_() {
+  var book = SpreadsheetApp.getActive();
+  var sheet = book.getSheetByName("Akku mérés");
+  if (!sheet) {
+    sheet = book.insertSheet("Akku mérés");
+    sheet.appendRow([
+      "Session",
+      "Meghívó",
+      "Másodperc",
+      "Töltöttség (%)",
+      "Feszültség (mV)",
+      "Hőmérséklet (°C)",
+      "Ciklus",
+      "Töltés",
+      "Áram (mA)",
+      "Időpont",
+    ]);
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+function auditBatterySample_(sample) {
+  if (!sample || typeof sample !== "object")
+    auditError_("Hibás akkumulátormérési adatok.");
+  var sec = sample.sec;
+  if (typeof sec !== "number" || sec % 1 !== 0 || sec < 0 || sec > 3600)
+    auditError_("Hibás akkumulátormérési adatok.");
+  var level = sample.level === undefined ? null : sample.level;
+  if (
+    level !== null &&
+    (typeof level !== "number" || level % 1 !== 0 || level < 0 || level > 100)
+  )
+    auditError_("Hibás akkumulátormérési adatok.");
+  var voltageMv = sample.voltageMv === undefined ? null : sample.voltageMv;
+  if (
+    voltageMv !== null &&
+    (typeof voltageMv !== "number" ||
+      voltageMv % 1 !== 0 ||
+      voltageMv < 2000 ||
+      voltageMv > 6000)
+  )
+    auditError_("Hibás akkumulátormérési adatok.");
+  var tempC = sample.tempC === undefined ? null : sample.tempC;
+  if (
+    tempC !== null &&
+    (typeof tempC !== "number" ||
+      !isFinite(tempC) ||
+      tempC < -20 ||
+      tempC > 100)
+  )
+    auditError_("Hibás akkumulátormérési adatok.");
+  var cycles = sample.cycles === undefined ? null : sample.cycles;
+  if (
+    cycles !== null &&
+    (typeof cycles !== "number" ||
+      cycles % 1 !== 0 ||
+      cycles < 0 ||
+      cycles > 10000)
+  )
+    auditError_("Hibás akkumulátormérési adatok.");
+  var charging = sample.charging === undefined ? null : sample.charging;
+  if (charging !== null && typeof charging !== "boolean")
+    auditError_("Hibás akkumulátormérési adatok.");
+  var currentMa = sample.currentMa === undefined ? null : sample.currentMa;
+  if (
+    currentMa !== null &&
+    (typeof currentMa !== "number" ||
+      currentMa % 1 !== 0 ||
+      currentMa < -10000 ||
+      currentMa > 10000)
+  )
+    auditError_("Hibás akkumulátormérési adatok.");
+  return {
+    sec: sec,
+    level: level,
+    voltageMv: voltageMv,
+    tempC: tempC,
+    cycles: cycles,
+    charging: charging,
+    currentMa: currentMa,
+  };
+}
+
+function auditBattery_(body) {
+  var session = auditSession_(body);
+  if (session.invite.values[AUDIT_COLUMNS.state - 1] !== "running")
+    auditError_("A teszt már lezárult.");
+  if (
+    !Array.isArray(body.samples) ||
+    !body.samples.length ||
+    body.samples.length > 120
+  )
+    auditError_("Hibás akkumulátormérési adatok.");
+  var samples = body.samples.map(auditBatterySample_);
+  var section = auditSections_([body.section])[0];
+  var eventsSheet = auditEventsSheet_();
+  var allEvents = eventsSheet.getDataRange().getValues();
+  var usbRow = 0;
+  var usbSections = [];
+  for (var index = 1; index < allEvents.length; index++) {
+    if (
+      allEvents[index][0] === session.sid &&
+      String(allEvents[index][1]) === session.code &&
+      allEvents[index][3] === "usb"
+    ) {
+      usbRow = index + 1;
+      usbSections = JSON.parse(allEvents[index][5]).filter(function (item) {
+        return item.title !== section.title;
+      });
+      break;
+    }
+  }
+  if (!usbRow)
+    auditError_("Az akkumulátorméréshez előbb USB-kiolvasás szükséges.");
+  var batterySheet = auditBatterySheet_();
+  var existing = batterySheet
+    .getDataRange()
+    .getValues()
+    .slice(1)
+    .filter(function (row) {
+      return row[0] === session.sid && String(row[1]) === session.code;
+    });
+  var seen = {};
+  existing.forEach(function (row) {
+    seen[Number(row[2])] = true;
+  });
+  var saved = 0;
+  samples.forEach(function (sample) {
+    if (seen[sample.sec]) return;
+    seen[sample.sec] = true;
+    saved++;
+    batterySheet.appendRow([
+      session.sid,
+      session.code,
+      sample.sec,
+      sample.level === null ? "" : sample.level,
+      sample.voltageMv === null ? "" : sample.voltageMv,
+      sample.tempC === null ? "" : sample.tempC,
+      sample.cycles === null ? "" : sample.cycles,
+      sample.charging === null ? "" : sample.charging ? "igen" : "nem",
+      sample.currentMa === null ? "" : sample.currentMa,
+      new Date(),
+    ]);
+  });
+  usbSections.push(section);
+  eventsSheet.getRange(usbRow, 6).setValue(JSON.stringify(usbSections));
+  session.sheet.getRange(session.invite.row, COLS.used).setValue(new Date());
+  return json_({ ok: true, saved: saved });
 }
 
 function auditBatterySheet_() {

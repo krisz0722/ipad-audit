@@ -213,6 +213,9 @@ SCREENS.review = function () {
     (DEMO
       ? '<div class="note">Próbaüzemben a Küldés gomb nem küld el semmit.</div>'
       : "") +
+    '<label class="field" for="review-email">Opcionális emailcím az összesített riporthoz (nem kötelező, a Google Sheetbe elmentett riportot egyszer küldjük el ide)<input type="email" id="review-email" value="' +
+    esc(auditEmail) +
+    '" placeholder="Nem kötelező (pl. nev@pelda.hu)" maxlength="254" autocomplete="off" autocapitalize="none" spellcheck="false"></label>' +
     '<label class="check"><input type="checkbox" id="consent"> Ellenőriztem az eredményeket, lezárom a tesztet, és kérem az összesített riport mentését.</label>' +
     '<div id="msg"></div>' +
     '<div class="nav"><button type="button" class="btn secondary" id="back">Vissza</button>' +
@@ -312,6 +315,24 @@ function send(sections, d, request) {
   }
   if (state.sending || state.sent) return;
   if (!$("consent") || !$("consent").checked) return;
+  if ($("review-email")) {
+    var enteredEmail = $("review-email").value.replace(/^\s+|\s+$/g, "");
+    if (enteredEmail) {
+      if (
+        enteredEmail.length > 254 ||
+        /[^\x21-\x7e]/.test(enteredEmail) ||
+        !/^[^\s@,;<>:"\\]+@[^\s@,;<>:"\\]+\.[^\s@,;<>:"\\]+$/.test(enteredEmail)
+      ) {
+        message(
+          "msg",
+          '<div class="error">Adj meg egy érvényes emailcímet, vagy hagyd üresen a mezőt.</div>'
+        );
+        return;
+      }
+      auditEmail = enteredEmail;
+      state.auditEmailRequested = true;
+    }
+  }
   if (DEMO) {
     done(sections);
     return;

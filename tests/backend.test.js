@@ -198,6 +198,51 @@ test("audit: az akkumulátor-terhelésteszt mintái az Akku mérés munkalapra, 
     status.sections.map((section) => section.title),
     ["Eszköz", "Akkumulátor terhelésteszt"],
   );
+  const codeOnlyStatus = backend.call({
+    action: "audit_status",
+    code: "123456789",
+  });
+  assert.strictEqual(codeOnlyStatus.ok, true);
+  assert.strictEqual(codeOnlyStatus.sid, AUDIT_SID);
+});
+
+test("audit: a folyamat végén a finish lépésben is kérhető az összesített eladói email", () => {
+  const backend = makeBackend();
+  beginAudit(backend, false);
+  assert.strictEqual(
+    backend.call({
+      action: "audit_event",
+      code: "123456789",
+      sid: AUDIT_SID,
+      seq: 1,
+      step: "usb",
+      status: "ok",
+      sections: SECTIONS,
+    }).ok,
+    true,
+  );
+  assert.strictEqual(
+    backend.call({
+      action: "audit_event",
+      code: "123456789",
+      sid: AUDIT_SID,
+      seq: 2,
+      step: "finish",
+      status: "ok",
+      emailRequested: true,
+      sections: SECTIONS,
+    }).ok,
+    true,
+  );
+  const mailResult = backend.call({
+    action: "audit_email",
+    code: "123456789",
+    sid: AUDIT_SID,
+    email: "seller@example.test",
+  });
+  assert.strictEqual(mailResult.ok, true);
+  assert.strictEqual(mailResult.emailSent, true);
+  assert.strictEqual(backend.mails.length, 1);
 });
 
 test("audit: másik session nem olvashat, és a hiányzó lépés nem menthető", () => {

@@ -25,7 +25,7 @@ function auditFlush() {
   if (auditPending) return auditPending;
   var event = state.auditQueue[0];
   if (event.step === "finish" && !auditFinishing) return Promise.resolve();
-  auditPending = auditCall({
+  var payload = {
     action: "audit_event",
     code: CODE,
     sid: state.auditSid,
@@ -33,7 +33,10 @@ function auditFlush() {
     step: event.step,
     status: event.status,
     sections: event.sections
-  }).then(
+  };
+  if (event.step === "finish" && (state.auditEmailRequested || auditEmail))
+    payload.emailRequested = true;
+  auditPending = auditCall(payload).then(
     function () {
       state.auditQueue.shift();
       save();
@@ -126,13 +129,14 @@ function auditOpen(next, create) {
     );
     return;
   }
-  if (!create && !/^[0-9A-F]{32}$/.test(state.auditSid)) {
+  if (!create && state.auditSid && !/^[0-9A-F]{32}$/.test(state.auditSid)) {
     message(
       "msg",
       '<div class="error">A reader végén megjelenő teljes folytatólinket nyisd meg ezen az eszközön.</div>'
     );
     return;
   }
+  if (!create && !state.auditSource) state.auditSource = "reader";
   if (create) {
     var wanted = $("audit-email-wanted").checked;
     auditEmail = wanted ? $("audit-email").value.replace(/^\s+|\s+$/g, "") : "";
@@ -179,6 +183,8 @@ function auditOpen(next, create) {
       });
     })
     .then(function (result) {
+      if (result.sid && /^[0-9A-F]{32}$/.test(result.sid))
+        state.auditSid = result.sid;
       state.auditEmailRequested = result.emailRequested;
       state.auditQueue = state.auditQueue.filter(function (event) {
         return event.seq > result.seq;
@@ -227,11 +233,7 @@ function auditComplete(sections) {
     .then(function (result) {
       if (result.state !== "completed")
         throw serverError("A végső riport mentése még nem igazolt.");
-      if (
-        state.auditSource === "browser" &&
-        state.auditEmailRequested &&
-        auditEmail
-      ) {
+      if (auditEmail) {
         return auditCall({
           action: "audit_email",
           code: CODE,
@@ -246,9 +248,12 @@ function auditComplete(sections) {
           return { sections: result.sections, copyStatus: "sent" };
         });
       }
+      var emailWanted = Boolean(
+        state.auditEmailRequested || result.emailRequested
+      );
       return {
         sections: result.sections,
-        copyStatus: state.auditEmailRequested
+        copyStatus: emailWanted
           ? state.auditSource === "browser"
             ? "missing"
             : "reader"
