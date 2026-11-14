@@ -26,7 +26,7 @@ def _email(backend, code, sid, email, notify):
         if result.get("emailSent"):
             notify("Az összesített eladói email küldését a szerver visszaigazolta.")
         else:
-            notify("Az eladói email küldése nem igazolt. Az eredmények a Sheetben megmaradtak.")
+            notify("Az eladói email küldése nem igazolt.")
     except BackendError as error:
         notify("Az eladói email küldése nem igazolt: " + str(error))
 
@@ -57,7 +57,7 @@ def watch(backend, code, sid, email, notify, timeout=1800, interval=3, clock=tim
                     ))
                     after = sequence
                 if result["state"] != "running":
-                    notify("A teszt véget ért. Az eredmények a private Sheetben vannak.")
+                    notify("A teszt véget ért.")
                     _email(backend, code, sid, email, notify)
                     return result["state"]
             except BackendError:
@@ -75,5 +75,5 @@ def watch(backend, code, sid, email, notify, timeout=1800, interval=3, clock=tim
             backend.audit_event(code, sid, result["seq"] + 1, "cancel", "error")
         _email(backend, code, sid, email, notify)
     except BackendError:
-        notify("A lezárást nem sikerült elmenteni. Csak a korábban visszaigazolt adatok vannak a Sheetben.")
+        notify("A lezárást nem sikerült elmenteni.")
     return "interrupted"

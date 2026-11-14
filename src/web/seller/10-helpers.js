@@ -36,15 +36,26 @@ function formatCode(c) {
   return String(c || "");
 }
 function updateLiveVersion() {
-  var bar = document.querySelector ? document.querySelector(".version-bar") : null;
+  var bar = document.querySelector
+    ? document.querySelector(".version-bar")
+    : null;
   if (!bar) return;
   var url = "version.json";
   function applyCommit(data) {
     if (!data) return;
     var hash = data.commit || data.short_id;
-    var dateStr = data.date ? (data.date + (data.time ? " " + data.time : "")) : "";
+    var dateStr = data.date
+      ? data.date + (data.time ? " " + data.time : "")
+      : "";
     if (!hash && !dateStr) return;
-    bar.innerHTML = 'Git: ' + esc(hash || '') + ' <span aria-hidden="true">|</span> Frissítve: <time datetime="' + esc(data.date || '') + '">' + esc(dateStr) + '</time>';
+    bar.innerHTML =
+      "Git: " +
+      esc(hash || "") +
+      ' <span aria-hidden="true">|</span> Frissítve: <time datetime="' +
+      esc(data.date || "") +
+      '">' +
+      esc(dateStr) +
+      "</time>";
   }
   if (window.fetch) {
     fetch(url)
@@ -112,7 +123,7 @@ function top() {
     (DEMO ? '<span class="demo">Próbaüzem: semmi nem megy el</span>' : "") +
     "</div>" +
     (state.auditActive
-      ? '<p class="muted" id="audit-status" role="status">A teszt lépéseit a private Sheetbe mentjük.</p>'
+      ? '<p class="muted" id="audit-status" role="status"></p>'
       : "")
   );
 }

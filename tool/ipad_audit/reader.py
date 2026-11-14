@@ -301,10 +301,10 @@ def main(argv=None):
     if args.monitor_timeout <= 0:
         print("A követési időkorlát legyen pozitív.", file=sys.stderr)
         return 1
-    print("A program a modellt, serialt, hardverplatformot, rendszerverziót, tárhelyet, akkumulátoradatokat és az Aktiválási zár jelzését olvassa ki. Az eredményeket és a webes teszt lépéseit a vásárló private Sheetjébe mentjük. A vásárlónak nem küldünk emailt.", file=sys.stderr)
+    print("A program a modellt, serialt, hardverplatformot, rendszerverziót, tárhelyet, akkumulátoradatokat és az Aktiválási zár jelzését olvassa ki.", file=sys.stderr)
     print("Ezután megpróbálja az audit oldalát az iPad vagy iPhone Safarijában megnyitni. Ehhez engedélyezett Web Inspector és nyitott audit oldal vagy üres Safari tab szükséges; más oldalt nem irányítunk át.", file=sys.stderr)
     print("A Safari-megnyitási próba közben a könyvtár átmenetileg megkapja a nyitott inspectálható appok és tabok címét, URL-jét. Ezt nem mentjük, nem küldjük el; oldaltartalmat és böngészési előzményt nem kérünk le.", file=sys.stderr)
-    if input("Beleegyezel a kiolvasásba és a tesztadatok Sheetbe mentésébe? [Igen/nem, Enter: igen]: ").strip().lower() not in ("", "igen", "yes"):
+    if input("Beleegyezel a kiolvasásba és a teszt elvégzésébe? [Igen/nem, Enter: igen]: ").strip().lower() not in ("", "igen", "yes"):
         return 0
     print("Add meg az emailcímedet: a számítógépes mérés után oda küldjük a kattintható linket az iPaden folytatandó teszthez, és a végén az összesített riportot is. A címet csak a program memóriájában tartjuk a teszt végéig.", file=sys.stderr)
     while True:
@@ -330,7 +330,7 @@ def main(argv=None):
         print("Az új flow a repositoryban lévő Apps Script új deploymentjét igényli.", file=sys.stderr)
         pause()
         return 1
-    print("USB-kiolvasás, majd mentés a private Sheetbe.", file=sys.stderr)
+    print("USB-kiolvasás folyamatban...", file=sys.stderr)
     try:
         raw = asyncio.run(read_raw(notify))
     except (TimeoutError, KeyboardInterrupt):

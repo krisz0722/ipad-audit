@@ -378,13 +378,13 @@ SCREENS.done = function () {
   var html =
     top() +
     "<h1>Köszönjük!</h1>" +
-    '<div class="success">Az összesített riportot elmentettük a private Sheetbe.</div>' +
+    '<div class="success">Az összesített riport elkészült.</div>' +
     (state.copyStatus === "sent"
       ? "<p>Az összesített eladói email küldését a szerver visszaigazolta.</p>"
       : state.copyStatus === "reader"
         ? '<div class="note">A számítógépen futó reader most küldi az elején kért összesített emailt. A programot annak visszaigazolásáig hagyd nyitva.</div>'
         : state.copyStatus === "missing"
-          ? '<div class="note warn">A böngészőlap újratöltése miatt az emailcím már nincs a memóriában, ezért email nem ment. A teljes riport a Sheetben megmaradt.</div>'
+          ? '<div class="note warn">A böngészőlap újratöltése miatt az emailcím már nincs a memóriában, ezért email nem ment.</div>'
           : "") +
     "<p>Az átmeneti tesztadatokat töröltük. Az emailcímet nem mentjük el.</p>";
   if (state.demoSections) {

@@ -126,15 +126,26 @@ function formatCode(c) {
   return String(c || "");
 }
 function updateLiveVersion() {
-  var bar = document.querySelector ? document.querySelector(".version-bar") : null;
+  var bar = document.querySelector
+    ? document.querySelector(".version-bar")
+    : null;
   if (!bar) return;
   var url = "version.json";
   function applyCommit(data) {
     if (!data) return;
     var hash = data.commit || data.short_id;
-    var dateStr = data.date ? (data.date + (data.time ? " " + data.time : "")) : "";
+    var dateStr = data.date
+      ? data.date + (data.time ? " " + data.time : "")
+      : "";
     if (!hash && !dateStr) return;
-    bar.innerHTML = 'Git: ' + esc(hash || '') + ' <span aria-hidden="true">|</span> Frissítve: <time datetime="' + esc(data.date || '') + '">' + esc(dateStr) + '</time>';
+    bar.innerHTML =
+      "Git: " +
+      esc(hash || "") +
+      ' <span aria-hidden="true">|</span> Frissítve: <time datetime="' +
+      esc(data.date || "") +
+      '">' +
+      esc(dateStr) +
+      "</time>";
   }
   if (window.fetch) {
     fetch(url)
@@ -202,7 +213,7 @@ function top() {
     (DEMO ? '<span class="demo">Próbaüzem: semmi nem megy el</span>' : "") +
     "</div>" +
     (state.auditActive
-      ? '<p class="muted" id="audit-status" role="status">A teszt lépéseit a private Sheetbe mentjük.</p>'
+      ? '<p class="muted" id="audit-status" role="status"></p>'
       : "")
   );
 }
@@ -656,7 +667,7 @@ function auditFlush() {
       state.auditQueue.shift();
       save();
       auditPending = null;
-      auditNotice("A lépések mentve a private Sheetbe.");
+      auditNotice("");
       return auditFlush();
     },
     function (error) {
@@ -883,9 +894,7 @@ function auditComplete(sections) {
           email: auditEmail
         }).then(function (mail) {
           if (!mail.emailSent)
-            throw serverError(
-              "Az email küldése nem igazolt. Az eredmények a Sheetben megmaradtak."
-            );
+            throw serverError("Az email küldése nem igazolt.");
           auditEmail = "";
           return { sections: result.sections, copyStatus: "sent" };
         });
@@ -1286,11 +1295,11 @@ SCREENS.audit_start = function () {
   show(
     top() +
       "<h1>A teszt indítása</h1>" +
-      "<p>A rész-eredményeket lépésenként a vásárló private Sheetjébe mentjük. A záró riport a végén készül el.</p>" +
+      "<p>A záró riport a teszt végén készül el.</p>" +
       '<label class="check"><input type="checkbox" id="audit-email-wanted"> Kérek másolatot emailben az összesített riportról</label>' +
       '<label class="field" id="audit-email-field" for="audit-email" hidden>Emailcím<input type="email" id="audit-email" maxlength="254" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="sajat@email.hu"></label>' +
-      '<p class="muted">Az emailcímet nem mentjük a Sheetbe, csak az egyszeri küldéshez használjuk a végén.</p>' +
-      '<label class="check"><input type="checkbox" id="audit-consent"> Beleegyezem a teszt lépéseinek és eredményeinek mentésébe a vásárló private Sheetjében.</label>' +
+      '<p class="muted">Az emailcímet nem mentjük el, csak az egyszeri küldéshez használjuk a végén.</p>' +
+      '<label class="check"><input type="checkbox" id="audit-consent"> Beleegyezem a teszt lépéseinek és eredményeinek mentésébe.</label>' +
       '<div id="msg"></div><button type="button" class="btn" id="audit-next">Teszt indítása</button>' +
       foot()
   );
@@ -1407,16 +1416,20 @@ SCREENS.usb_get = function () {
       if (CODE) {
         window.alert(
           "FONTOS!\n\n" +
-          "Ezt a kódot add meg az USB programban indításkor:\n\n" +
-          formatCode(CODE) + "\n\n" +
-          "A letöltött kiolvasó program indításkor ezt a 9 számjegyű kódot fogja kérni a számítógépen."
+            "Ezt a kódot add meg az USB programban indításkor:\n\n" +
+            formatCode(CODE) +
+            "\n\n" +
+            "A letöltött kiolvasó program indításkor ezt a 9 számjegyű kódot fogja kérni a számítógépen."
         );
       }
     });
   }
   on("copy-usb-code", function () {
     copyText(CODE, function (ok) {
-      message("copied-usb-code", ok ? " Kimásolva." : " Másold ki: " + esc(CODE));
+      message(
+        "copied-usb-code",
+        ok ? " Kimásolva." : " Másold ki: " + esc(CODE)
+      );
     });
   });
   on("u-next", function () {
@@ -1455,7 +1468,9 @@ SCREENS.usb_run = function () {
       runStep +
       "</li>" +
       "<li><b>Kiolvasás:</b> Indításkor add meg a fenti 9 jegyű kódot (" +
-      (CODE ? '<b>' + esc(formatCode(CODE)) + '</b>' : 'a vásárlótól kapott kódot') +
+      (CODE
+        ? "<b>" + esc(formatCode(CODE)) + "</b>"
+        : "a vásárlótól kapott kódot") +
       "), és hagyd jóvá a mérést. (Ha a gépen még nincs Apple USB driver, a program automatikusan feltelepíti, majd a telepítőfájlokat rögtön törli).</li>" +
       "<li><b>Folytatás az eszközön:</b> A program kiírja a webes folytatólinket. Nyisd meg ezt a linket az iPaden vagy iPhone-on a hardvertesztekhez.</li>" +
       "</ol>" +
@@ -1488,10 +1503,10 @@ SCREENS.web_intro = function () {
       progress(2) +
       "<h1>Webes tesztek indítása</h1>" +
       '<p class="lead">Az USB-mérés megtörtént. Most magán az eszközön teszteljük az érintőképernyőt, mozgásérzékelőt, hangszórót, kamerákat, kijelzőt és a fizikai gombokat. Kb. 2-3 percet vesz igénybe.</p>' +
-      '<div class="note">A teszt nem készít fotót, nem rögzít hangot és nem fér hozzá személyes adathoz. A rész-eredmények a vásárló private Sheetjébe mentődnek. A számítógépen futó programot hagyd nyitva a végéig.</div>' +
+      '<div class="note">A teszt nem készít fotót, nem rögzít hangot és nem fér hozzá személyes adathoz. A számítógépen futó programot hagyd nyitva a végéig.</div>' +
       '<label class="check"><input type="checkbox" id="audit-consent"' +
       (state.auditConsent ? " checked" : "") +
-      '> Beleegyezem a webes teszt lépéseinek, rész-eredményeinek és hibajelzéseinek folyamatos mentésébe a vásárló private Sheetjében.</label><div id="msg"></div>' +
+      '> Beleegyezem a webes teszt lépéseinek és eredményeinek mentésébe.</label><div id="msg"></div>' +
       foot("web-start", "Webes tesztek indítása")
   );
   on("web-start", function () {
@@ -1882,6 +1897,12 @@ function hwNext() {
   }
   go(afterHw());
 }
+function clearHwActions() {
+  var actions = $("hw-actions");
+  if (actions && actions.parentNode) {
+    actions.parentNode.removeChild(actions);
+  }
+}
 function hwDone(name, status, detail) {
   state.hw[name] = { status: status, detail: detail || "" };
   save();
@@ -1898,6 +1919,7 @@ function hwResult(name) {
       : r.status === "skipped"
         ? "kihagyva" + (r.detail ? ": " + r.detail : "")
         : r.detail || (r.status === "ok" ? "rendben" : "hibás");
+  clearHwActions();
   message(
     "result",
     '<div class="' +
@@ -1921,7 +1943,7 @@ function hwScreen(name, lead, extra, supported, unavailableText, pre) {
       "</p>" +
       (pre || "") +
       (supported && !alreadyDone
-        ? '<button type="button" class="btn" id="hw-start">Indítás</button><p><button type="button" class="link" id="hw-skip">Kihagyom</button></p>'
+        ? '<div id="hw-actions"><button type="button" class="btn" id="hw-start">Indítás</button><p><button type="button" class="link" id="hw-skip">Kihagyom</button></p></div>'
         : "") +
       (extra || "") +
       '<div id="result"></div>' +
@@ -1939,6 +1961,10 @@ function hwScreen(name, lead, extra, supported, unavailableText, pre) {
   on("hw-skip", function () {
     hwDone(name, "skipped");
     hwNext();
+  });
+  on("hw-start", function () {
+    var actions = $("hw-actions");
+    if (actions) actions.style.display = "none";
   });
   return true;
 }
@@ -3365,13 +3391,13 @@ SCREENS.done = function () {
   var html =
     top() +
     "<h1>Köszönjük!</h1>" +
-    '<div class="success">Az összesített riportot elmentettük a private Sheetbe.</div>' +
+    '<div class="success">Az összesített riport elkészült.</div>' +
     (state.copyStatus === "sent"
       ? "<p>Az összesített eladói email küldését a szerver visszaigazolta.</p>"
       : state.copyStatus === "reader"
         ? '<div class="note">A számítógépen futó reader most küldi az elején kért összesített emailt. A programot annak visszaigazolásáig hagyd nyitva.</div>'
         : state.copyStatus === "missing"
-          ? '<div class="note warn">A böngészőlap újratöltése miatt az emailcím már nincs a memóriában, ezért email nem ment. A teljes riport a Sheetben megmaradt.</div>'
+          ? '<div class="note warn">A böngészőlap újratöltése miatt az emailcím már nincs a memóriában, ezért email nem ment.</div>'
           : "") +
     "<p>Az átmeneti tesztadatokat töröltük. Az emailcímet nem mentjük el.</p>";
   if (state.demoSections) {

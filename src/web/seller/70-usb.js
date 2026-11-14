@@ -74,16 +74,20 @@ SCREENS.usb_get = function () {
       if (CODE) {
         window.alert(
           "FONTOS!\n\n" +
-          "Ezt a kódot add meg az USB programban indításkor:\n\n" +
-          formatCode(CODE) + "\n\n" +
-          "A letöltött kiolvasó program indításkor ezt a 9 számjegyű kódot fogja kérni a számítógépen."
+            "Ezt a kódot add meg az USB programban indításkor:\n\n" +
+            formatCode(CODE) +
+            "\n\n" +
+            "A letöltött kiolvasó program indításkor ezt a 9 számjegyű kódot fogja kérni a számítógépen."
         );
       }
     });
   }
   on("copy-usb-code", function () {
     copyText(CODE, function (ok) {
-      message("copied-usb-code", ok ? " Kimásolva." : " Másold ki: " + esc(CODE));
+      message(
+        "copied-usb-code",
+        ok ? " Kimásolva." : " Másold ki: " + esc(CODE)
+      );
     });
   });
   on("u-next", function () {
@@ -122,7 +126,9 @@ SCREENS.usb_run = function () {
       runStep +
       "</li>" +
       "<li><b>Kiolvasás:</b> Indításkor add meg a fenti 9 jegyű kódot (" +
-      (CODE ? '<b>' + esc(formatCode(CODE)) + '</b>' : 'a vásárlótól kapott kódot') +
+      (CODE
+        ? "<b>" + esc(formatCode(CODE)) + "</b>"
+        : "a vásárlótól kapott kódot") +
       "), és hagyd jóvá a mérést. (Ha a gépen még nincs Apple USB driver, a program automatikusan feltelepíti, majd a telepítőfájlokat rögtön törli).</li>" +
       "<li><b>Folytatás az eszközön:</b> A program kiírja a webes folytatólinket. Nyisd meg ezt a linket az iPaden vagy iPhone-on a hardvertesztekhez.</li>" +
       "</ol>" +
@@ -155,10 +161,10 @@ SCREENS.web_intro = function () {
       progress(2) +
       "<h1>Webes tesztek indítása</h1>" +
       '<p class="lead">Az USB-mérés megtörtént. Most magán az eszközön teszteljük az érintőképernyőt, mozgásérzékelőt, hangszórót, kamerákat, kijelzőt és a fizikai gombokat. Kb. 2-3 percet vesz igénybe.</p>' +
-      '<div class="note">A teszt nem készít fotót, nem rögzít hangot és nem fér hozzá személyes adathoz. A rész-eredmények a vásárló private Sheetjébe mentődnek. A számítógépen futó programot hagyd nyitva a végéig.</div>' +
+      '<div class="note">A teszt nem készít fotót, nem rögzít hangot és nem fér hozzá személyes adathoz. A számítógépen futó programot hagyd nyitva a végéig.</div>' +
       '<label class="check"><input type="checkbox" id="audit-consent"' +
       (state.auditConsent ? " checked" : "") +
-      '> Beleegyezem a webes teszt lépéseinek, rész-eredményeinek és hibajelzéseinek folyamatos mentésébe a vásárló private Sheetjében.</label><div id="msg"></div>' +
+      '> Beleegyezem a webes teszt lépéseinek és eredményeinek mentésébe.</label><div id="msg"></div>' +
       foot("web-start", "Webes tesztek indítása")
   );
   on("web-start", function () {

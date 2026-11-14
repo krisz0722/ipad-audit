@@ -50,6 +50,12 @@ function hwNext() {
   }
   go(afterHw());
 }
+function clearHwActions() {
+  var actions = $("hw-actions");
+  if (actions && actions.parentNode) {
+    actions.parentNode.removeChild(actions);
+  }
+}
 function hwDone(name, status, detail) {
   state.hw[name] = { status: status, detail: detail || "" };
   save();
@@ -66,6 +72,7 @@ function hwResult(name) {
       : r.status === "skipped"
         ? "kihagyva" + (r.detail ? ": " + r.detail : "")
         : r.detail || (r.status === "ok" ? "rendben" : "hibás");
+  clearHwActions();
   message(
     "result",
     '<div class="' +
@@ -89,7 +96,7 @@ function hwScreen(name, lead, extra, supported, unavailableText, pre) {
       "</p>" +
       (pre || "") +
       (supported && !alreadyDone
-        ? '<button type="button" class="btn" id="hw-start">Indítás</button><p><button type="button" class="link" id="hw-skip">Kihagyom</button></p>'
+        ? '<div id="hw-actions"><button type="button" class="btn" id="hw-start">Indítás</button><p><button type="button" class="link" id="hw-skip">Kihagyom</button></p></div>'
         : "") +
       (extra || "") +
       '<div id="result"></div>' +
@@ -107,6 +114,10 @@ function hwScreen(name, lead, extra, supported, unavailableText, pre) {
   on("hw-skip", function () {
     hwDone(name, "skipped");
     hwNext();
+  });
+  on("hw-start", function () {
+    var actions = $("hw-actions");
+    if (actions) actions.style.display = "none";
   });
   return true;
 }

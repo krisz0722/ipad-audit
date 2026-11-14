@@ -129,11 +129,11 @@ SCREENS.audit_start = function () {
   show(
     top() +
       "<h1>A teszt indítása</h1>" +
-      "<p>A rész-eredményeket lépésenként a vásárló private Sheetjébe mentjük. A záró riport a végén készül el.</p>" +
+      "<p>A záró riport a teszt végén készül el.</p>" +
       '<label class="check"><input type="checkbox" id="audit-email-wanted"> Kérek másolatot emailben az összesített riportról</label>' +
       '<label class="field" id="audit-email-field" for="audit-email" hidden>Emailcím<input type="email" id="audit-email" maxlength="254" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="sajat@email.hu"></label>' +
-      '<p class="muted">Az emailcímet nem mentjük a Sheetbe, csak az egyszeri küldéshez használjuk a végén.</p>' +
-      '<label class="check"><input type="checkbox" id="audit-consent"> Beleegyezem a teszt lépéseinek és eredményeinek mentésébe a vásárló private Sheetjében.</label>' +
+      '<p class="muted">Az emailcímet nem mentjük el, csak az egyszeri küldéshez használjuk a végén.</p>' +
+      '<label class="check"><input type="checkbox" id="audit-consent"> Beleegyezem a teszt lépéseinek és eredményeinek mentésébe.</label>' +
       '<div id="msg"></div><button type="button" class="btn" id="audit-next">Teszt indítása</button>' +
       foot()
   );

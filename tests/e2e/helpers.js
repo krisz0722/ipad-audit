@@ -150,7 +150,7 @@ async function emulate(page, kind) {
 // A nyitóoldalról indít: beírja a kódot, és megnyomja a Rendben, kezdjük gombot.
 async function begin(page, f, code, label) {
   await page.goto('/');
-  await expect(page.locator('h1').first()).toHaveText('Az eszközöd állapotának ellenőrzése');
+  await expect(page.locator('h1').first()).toHaveText('Az eszköz állapotának ellenőrzése');
   await f.snap('Nyitóoldal');
   await f.step(label || 'Kód beírása, Rendben, kezdjük', async () => {
     await page.locator('#code').fill(code);
@@ -192,6 +192,7 @@ async function hwTouch(page, f, mode) {
   await dragAllCells(page, f);
   await expect(page.locator('#touch-overlay')).toHaveCount(0);
   await expect(page.locator('#result')).toContainText('mind a 96 mező');
+  await expect(page.locator('#hw-start')).toHaveCount(0);
   await f.snap('Érintés: eredmény');
   await hwNext(page);
 }

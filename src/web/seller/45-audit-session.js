@@ -44,7 +44,7 @@ function auditFlush() {
       state.auditQueue.shift();
       save();
       auditPending = null;
-      auditNotice("A lépések mentve a private Sheetbe.");
+      auditNotice("");
       return auditFlush();
     },
     function (error) {
@@ -271,9 +271,7 @@ function auditComplete(sections) {
           email: auditEmail
         }).then(function (mail) {
           if (!mail.emailSent)
-            throw serverError(
-              "Az email küldése nem igazolt. Az eredmények a Sheetben megmaradtak."
-            );
+            throw serverError("Az email küldése nem igazolt.");
           auditEmail = "";
           return { sections: result.sections, copyStatus: "sent" };
         });

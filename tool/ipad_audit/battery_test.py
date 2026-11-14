@@ -451,7 +451,7 @@ def run_interactive(backend, code, sid, notify, ask=input, sampler=None, clock=t
             backend.audit_battery(code, sid, batch, section)
             return True
         except BackendError as error:
-            notify("A Sheet-frissítés átmenetileg sikertelen, újrapróbáljuk: " + str(error))
+            notify("A mentés átmenetileg sikertelen, újrapróbáljuk: " + str(error))
             return False
 
     return asyncio.run(

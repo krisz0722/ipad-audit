@@ -737,7 +737,7 @@ function auditEmail_(body) {
   var count = Number(props.getProperty(dayKey) || 0);
   if (count >= DAILY_MAILS || MailApp.getRemainingDailyQuota() < 1)
     auditError_(
-      "Elérte a napi emailkeretet. Az eredmények a Sheetben megmaradtak.",
+      "Elérte a napi emailkeretet.",
     );
   var state = JSON.parse(
     auditStatus_({ code: session.code, sid: session.sid }).getContent(),
@@ -829,7 +829,7 @@ function auditLink_(body) {
     link +
     "\n\nMeghívókód: " +
     groupCode_(session.code) +
-    "\n\nA webes hardverteszteket ezen az eszközön végezd el. Az eredményeket folyamatosan mentjük a Google Sheetbe. A teszt legvégén az összesített riportot is elküldjük.\n";
+    "\n\nA webes hardverteszteket ezen az eszközön végezd el. A teszt legvégén az összesített riportot is elküldjük.\n";
   var html =
     '<div style="font:14px/1.5 Arial,sans-serif;color:#202124">' +
     '<h2 style="color:#1a73e8;margin:0 0 16px">iPad audit: folytasd az eladandó eszközön</h2>' +
