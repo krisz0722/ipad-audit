@@ -678,3 +678,12 @@ def test_local_web_missing_marker_is_rejected(tmp_path):
         server.shutdown()
         server.server_close()
         thread.join()
+
+
+def test_extract_code():
+    assert reader.extract_code("123456789") == "123456789"
+    assert reader.extract_code("123 456 789") == "123456789"
+    assert reader.extract_code("https://apple.audit.kokocloud.space/#123456789") == "123456789"
+    assert reader.extract_code("https://apple.audit.kokocloud.space/#123456789.0123456789ABCDEF0123456789ABCDEF") == "123456789"
+    assert reader.extract_code("DEMOFAKE1234") == "DEMOFAKE1234"
+    assert reader.extract_code("") == ""

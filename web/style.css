@@ -209,6 +209,41 @@ ul.plain li {
   background: #fef3c7;
   color: #78350f;
 }
+.code-alert {
+  background: #fef3c7;
+  border: 2px solid #f59e0b;
+  border-radius: 14px;
+  padding: 18px 20px;
+  margin: 20px 0;
+  text-align: center;
+  color: #78350f;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.15);
+}
+.code-alert-title {
+  display: block;
+  font-size: 17px;
+  font-weight: 700;
+  color: #92400e;
+  margin-bottom: 6px;
+}
+.code-alert-digits {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: #1c1917;
+  padding: 8px 18px;
+  background: #ffffff;
+  border: 2px dashed #f59e0b;
+  border-radius: 10px;
+  display: inline-block;
+  margin: 10px 0 12px;
+}
+.code-alert-sub {
+  margin: 8px 0 0;
+  font-size: 15px;
+  color: #78350f;
+}
 .error {
   background: #fee2e2;
   color: #7f1d1d;

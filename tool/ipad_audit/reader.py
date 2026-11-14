@@ -155,6 +155,15 @@ def usb_sections(raw):
     return [{"title": "USB-s kiolvasás", "rows": rows}]
 
 
+def extract_code(text):
+    if not text:
+        return ""
+    m = re.search(r"(?:#|\b)([0-9]{9}|[0-9A-Z]{12})(?:\b|\.|$)", str(text).strip())
+    if m:
+        return m.group(1).upper()
+    return re.sub(r"[\s-]", "", str(text)).upper()
+
+
 def main(argv=None):
     from ipad_audit import audit, battery_test, config, reader_web
     from ipad_audit.backend import Backend, BackendError
@@ -170,7 +179,7 @@ def main(argv=None):
     except ValueError as error:
         print(str(error), file=sys.stderr)
         return 1
-    code = re.sub(r"[\s-]", "", args.code or input("A vásárlótól kapott meghívókód: ")).upper()
+    code = extract_code(args.code or input("A vásárlótól kapott meghívókód: "))
     if not re.fullmatch(r"(?:[0-9]{9}|[0-9A-Z]{12})", code):
         print("Hibás meghívókód.", file=sys.stderr)
         return 1
@@ -248,7 +257,7 @@ def main(argv=None):
     print("Itt a számítógépes méréssel végeztünk! Az eladandó eszközön nyisd meg a Safarit, és látogass el ide:\n", file=sys.stderr)
     print(reader_web.public_seller_url(code, base_url=web_url), file=sys.stderr)
     print(reader_web.public_seller_url(code, base_url=web_url, sid=sid), file=sys.stderr)
-    print("\nA link már tartalmazza a meghívókódot; a folyamat végén az iPaden is kérhetsz összesített emailriportot.", file=sys.stderr)
+    print("\nNyisd meg a fenti linket az eszközön a webes tesztekhez. A számítógépen ezt az ablakot hagyd nyitva a végéig.", file=sys.stderr)
     print("A számítógépen nem nyitunk böngészőt.", file=sys.stderr)
     print("=" * 64 + "\n", file=sys.stderr)
     result = audit.watch(backend, code, sid, copy_email, notify, timeout=args.monitor_timeout)

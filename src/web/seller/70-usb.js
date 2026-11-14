@@ -18,7 +18,7 @@ SCREENS.usb_get = function () {
     var files = TOOL_FILES[groups[g]];
     for (var i = 0; i < files.length; i++) {
       buttons +=
-        '<p><a class="btn" href="' +
+        '<p><a class="btn dl-link" href="' +
         esc(base + files[i][0]) +
         '" download>' +
         esc(files[i][1]) +
@@ -42,6 +42,16 @@ SCREENS.usb_get = function () {
     notes +=
       '<div class="note"><b>Linux (Ubuntu, Debian, Mint):</b> a letöltött <b>.deb</b> csomagra kattints duplán a letöltések között, majd kattints a <b>Telepítés</b> gombra. Ezután az <b>iPad Audit</b> ikonnal egy kattintással elindíthatod.</div>';
   }
+  var codeAlert = CODE
+    ? '<div class="code-alert" id="code-alert-box">' +
+      '<span class="code-alert-title">⚠️ FONTOS: Ezt a kódot add meg az USB programban:</span>' +
+      '<div class="code-alert-digits">' +
+      esc(formatCode(CODE)) +
+      "</div>" +
+      '<div><button type="button" class="btn small secondary" id="copy-usb-code">Kód másolása</button><span class="muted" id="copied-usb-code"></span></div>' +
+      '<p class="code-alert-sub">A letöltött kiolvasó program indításkor ezt a 9 számjegyű kódot fogja kérni.</p>' +
+      "</div>"
+    : "";
   var info =
     '<p class="lead">Az iPad és iPhone akkumulátorának pontos adatait a böngésző nem éri el, ezért az első lépést a számítógépeden, USB-kábellel végezzük.</p>' +
     '<div class="note"><b>Biztonságos és nyílt forráskódú:</b> a program csak olvas, semmit nem módosít az eszközön, és személyes adatokhoz nem fér hozzá. A kód nyilvánosan ellenőrizhető a ' +
@@ -52,11 +62,30 @@ SCREENS.usb_get = function () {
       progress(2) +
       "<h1>A kiolvasó program letöltése</h1>" +
       info +
+      codeAlert +
       "<h2>Töltsd le a programot a számítógépedre:</h2>" +
       buttons +
       notes +
       foot("u-next", "Letöltöttem, tovább")
   );
+  var dlLinks = app.querySelectorAll(".dl-link");
+  for (var d = 0; d < dlLinks.length; d++) {
+    dlLinks[d].addEventListener("click", function () {
+      if (CODE) {
+        window.alert(
+          "FONTOS!\n\n" +
+          "Ezt a kódot add meg az USB programban indításkor:\n\n" +
+          formatCode(CODE) + "\n\n" +
+          "A letöltött kiolvasó program indításkor ezt a 9 számjegyű kódot fogja kérni a számítógépen."
+        );
+      }
+    });
+  }
+  on("copy-usb-code", function () {
+    copyText(CODE, function (ok) {
+      message("copied-usb-code", ok ? " Kimásolva." : " Másold ki: " + esc(CODE));
+    });
+  });
   on("u-next", function () {
     go("usb_run");
   });
@@ -92,8 +121,8 @@ SCREENS.usb_run = function () {
       "<li><b>Indítás:</b> " +
       runStep +
       "</li>" +
-      "<li><b>Kiolvasás:</b> Add meg a kódot (" +
-      esc(CODE || "a 9 jegyű kód") +
+      "<li><b>Kiolvasás:</b> Indításkor add meg a fenti 9 jegyű kódot (" +
+      (CODE ? '<b>' + esc(formatCode(CODE)) + '</b>' : 'a vásárlótól kapott kódot') +
       "), és hagyd jóvá a mérést. (Opcionálisan 5 perces terhelésteszt is futtatható).</li>" +
       "<li><b>Folytatás az eszközön:</b> A program kiírja a webes folytatólinket. Nyisd meg ezt a linket az iPaden vagy iPhone-on a hardvertesztekhez.</li>" +
       "</ol>" +

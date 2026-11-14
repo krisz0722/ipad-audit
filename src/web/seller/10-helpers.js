@@ -28,6 +28,13 @@ function on(id, fn) {
   var node = $(id);
   if (node) node.addEventListener("click", fn);
 }
+function formatCode(c) {
+  var digits = String(c || "").replace(/\D/g, "");
+  if (digits.length >= 9) {
+    return digits.replace(/(\d{3})(?=\d)/g, "$1 ");
+  }
+  return String(c || "");
+}
 function updateLiveVersion() {
   var bar = document.querySelector ? document.querySelector(".version-bar") : null;
   if (!bar) return;
