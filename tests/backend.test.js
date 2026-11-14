@@ -15,7 +15,7 @@ const SECTIONS = [
 test("a deployment check jogosultságot ellenőriz, nem készít meghívót és nem küld emailt", () => {
   const backend = makeBackend();
   const result = backend.context.checkDeployment();
-  assert.strictEqual(result.version, "2026.11.14.4");
+  assert.strictEqual(result.version, "2026.11.14.5");
   assert.strictEqual(result.invitationSheetAvailable, true);
   assert.strictEqual(result.recipientAvailable, true);
   assert.strictEqual(result.remainingMailQuota, 100);
@@ -604,7 +604,7 @@ test("a report: a saját másolat külön címzettként számít a keretbe", () 
   const backend = makeBackend();
   backend.invite("123456789");
   const dayKey = "mails:" + new Date().toISOString().slice(0, 13);
-  backend.props.set(dayKey, "19");
+  backend.props.set(dayKey, "99");
   const payload = {
     action: "report",
     code: "123456789",
@@ -616,10 +616,10 @@ test("a report: a saját másolat külön címzettként számít a keretbe", () 
     false,
   );
   assert.strictEqual(backend.mails.length, 0);
-  assert.strictEqual(backend.props.get(dayKey), "19");
+  assert.strictEqual(backend.props.get(dayKey), "99");
   assert.strictEqual(backend.call(payload).ok, true);
   assert.strictEqual(backend.mails[0].bcc, undefined);
-  assert.strictEqual(backend.props.get(dayKey), "20");
+  assert.strictEqual(backend.props.get(dayKey), "100");
 });
 
 test("a report: a MailApp címzettkerete és az azonos cím kezelése", () => {
@@ -829,21 +829,27 @@ test("a finish: érvénytelen munkamenet és hibás riport elutasítva", () => {
   assert.strictEqual(b.mails.length, 0);
 });
 
-test("a finish: a napi riportkeret 20 email, a 21. elutasítva", () => {
+test("a finish: a napi riportkeret 100 email, a 101. elutasítva", () => {
   const b = makeBackend();
-  const results = [];
-  for (let i = 0; i < 21; i++) {
-    const code = String(100000001 + i);
-    b.invite(code);
-    const { sid } = b.call({ action: "start", code });
-    results.push(
-      b.call({ action: "finish", sid, serial: "X", sections: SECTIONS }),
-    );
-  }
-  assert.strictEqual(results.filter((r) => r.ok).length, 20);
-  assert.strictEqual(results[20].ok, false);
-  assert.match(results[20].error, /napi riportkeretet/);
-  assert.strictEqual(b.mails.length, 20);
+  const dayKey = "mails:" + new Date().toISOString().slice(0, 13);
+  b.props.set(dayKey, "99");
+  b.invite("100000001");
+  const { sid: sid1 } = b.call({ action: "start", code: "100000001" });
+  assert.strictEqual(
+    b.call({ action: "finish", sid: sid1, serial: "X", sections: SECTIONS }).ok,
+    true,
+  );
+  assert.strictEqual(b.props.get(dayKey), "100");
+  b.invite("100000002");
+  const { sid: sid2 } = b.call({ action: "start", code: "100000002" });
+  const result = b.call({
+    action: "finish",
+    sid: sid2,
+    serial: "X",
+    sections: SECTIONS,
+  });
+  assert.strictEqual(result.ok, false);
+  assert.match(result.error, /napi riportkeretet/);
 });
 
 test("a szerver nem tárol átadott eredményt: a handoff és a resume ismeretlen művelet", () => {

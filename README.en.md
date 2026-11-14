@@ -48,7 +48,7 @@ Missing USB fields and unsupported browser tests are marked unknown/not tested, 
 
 Data path: USB reader and the device browser -> Google Apps Script (`Meghívók` and `Tesztlépések` sheets); at the end, a combined report and (if requested at the beginning) a single seller email. An uncertain email delivery is not automatically repeated.
 
-The daily mail allowance is 20 emails (`DAILY_MAILS`).
+The daily mail allowance is 100 emails (`DAILY_MAILS`).
 
 The Safari-opening attempt requires Web Inspector, not Remote Automation. The program does not enable this setting. The library temporarily receives metadata for inspectable apps and tabs; we do not store or transmit it, and do not request page contents, cookies, or history. Navigation only targets the audit page or a blank Safari tab. The attempt has a timeout; actual iOS 9 device behavior still needs verification. Lack of Web Inspector does not prevent using the continuation link printed by the reader.
 

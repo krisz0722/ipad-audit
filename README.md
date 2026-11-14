@@ -48,7 +48,7 @@ Hiányzó USB-mező vagy nem elvégezhető webes teszt ismeretlen/nem tesztelt e
 
 Adatút: USB-reader és az eladandó eszköz böngészője -> Google Apps Script (`Meghívók` és `Tesztlépések` munkalapok); a végén összesített riport és (ha az eladó az induláskor kérte) egyetlen eladói email. Bizonytalan emailküldést a backend nem ismétel meg automatikusan.
 
-A napi emailkeret 20 levél (`DAILY_MAILS`).
+A napi emailkeret 100 levél (`DAILY_MAILS`).
 
 A Safari-megnyitási próba Web Inspectort igényel, nem Remote Automationt. A program nem kapcsolja be ezt a beállítást. A könyvtár átmenetileg megkapja az inspectálható appok és tabok metaadatait, de nem mentjük vagy küldjük el őket, és nem kérünk le oldaltartalmat, cookie-t vagy előzményt. Navigáció csak saját audit oldalon vagy üres Safari tabon történik. A próba időkorlátos; az iOS 9-es működés valódi eszközön még ellenőrizendő. Ennek hiánya nem akadályozza a reader által kiírt folytatólink használatát.
 

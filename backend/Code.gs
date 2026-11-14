@@ -1,14 +1,14 @@
 // iPad audit fogadó. Google Táblához kötött Apps Script.
 // Meghívó nélkül semmit nem fogad el és emailt sem küld.
 
-var BACKEND_VERSION = "2026.11.14.4";
+var BACKEND_VERSION = "2026.11.14.5";
 var SHEET_NAME = "Meghívók";
 var DEFAULT_BUYER_EMAIL = "krisztian.kovacs@mailbox.org";
 var INVITE_HOURS = 72;
 var MAX_BODY = 60000;
 var MAX_STEPS = 40;
 var MAX_STEP_SIZE = 4000;
-var DAILY_MAILS = 20;
+var DAILY_MAILS = 100;
 var SESSION_SECONDS = 21600; // A CacheService felső korlátja.
 var COLS = { code: 1, label: 2, expires: 3, status: 4, used: 5 };
 var CODE_DIGITS = 9;
@@ -39,7 +39,21 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu("iPad audit")
     .addItem("Új meghívó", "newInvite")
+    .addItem("Napi emailszámláló nullázása", "resetDailyCounter")
     .addToUi();
+}
+
+function resetDailyCounter() {
+  var props = PropertiesService.getScriptProperties();
+  var dayKey =
+    "mails:" + Utilities.formatDate(new Date(), "Etc/UTC", "yyyy-MM-dd");
+  props.deleteProperty(dayKey);
+  try {
+    var book = SpreadsheetApp.getActive();
+    if (book && typeof book.toast === "function") {
+      book.toast("A mai emailszámláló nullázva lett.", "iPad audit");
+    }
+  } catch (e) {}
 }
 
 function sheet_() {
