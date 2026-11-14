@@ -10,19 +10,19 @@ The code is public so that the seller (and anyone else) can see exactly what the
 
 ## For sellers: what does the page read?
 
-| What we read                                                                         | What we never read                                                      |
-| ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
-| battery cycle count, maximum capacity, and optional stress-test samples              | passwords, Apple ID, email addresses stored on the device, phone number |
-| device type, USB hardware platform, storage size, system version                     | photos, messages, contacts, files                                       |
-| whether you are signed out of your Apple ID (you tell us)                            | app and Safari tab contents, browsing history                           |
-| on a Mac: Activation Lock state, managed by an organization yes/no                   | IMEI, device name, location, Wi-Fi networks, MAC addresses, UDID        |
-| complete serial with USB data; sharing remains optional in the Mac web report        |                                                                         |
-| voluntarily entered email address, only for one-time delivery of the combined report | automatic reading of email addresses from the device                    |
-| temporary app/tab metadata for Safari opening: title and URL, excluded from reports  | Safari tab contents and cookies                                         |
+| What we read                                                                                                          | What we never read                                                      |
+| --------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| battery cycle count, maximum capacity, and optional stress-test samples                                               | passwords, Apple ID, email addresses stored on the device, phone number |
+| device type, USB hardware platform, storage size, system version                                                      | photos, messages, contacts, files                                       |
+| whether you are signed out of your Apple ID (you tell us)                                                             | app and Safari tab contents, browsing history                           |
+| on a Mac: Activation Lock state, managed by an organization yes/no                                                    | IMEI, device name, location, Wi-Fi networks, MAC addresses, UDID        |
+| complete serial with USB data; sharing remains optional in the Mac web report                                         |                                                                         |
+| voluntarily entered email address, only for one-time delivery of the Safari continuation link and the combined report | automatic reading of email addresses from the device                    |
+| temporary app/tab metadata for Safari opening: title and URL, excluded from reports                                   | Safari tab contents and cookies                                         |
 
-The USB reader asks for the invitation code and consent to save test data to the buyer's private Sheet before reading. Once reading finishes, the backend saves the USB data to the Sheet without sending any email to the buyer. There is no clipboard copying or data pasting. After saving USB data, the reader offers an optional battery stress test (during 1080p 60fps video playback, with configurable duration in minutes and sampling interval in seconds, default 5 min / 1 s), which also checks USB audio/video output activity, physical buttons (volume, Home, lock), accelerometer movement, Wi-Fi signal strength (RSSI), and SIM/modem, NAND, and Touch ID status: samples are synced in batches to the `Akku mérés` sheet tab, and the summary is added to the USB section in `Tesztlépések` and the final report. On the device being sold (using the `#CODE` or `#CODE.SESSION` link), after consent, browser test steps and partial results are saved to the Sheet as they happen; the combined report is finalized and displayed after preview approval and **Finish test** (**Teszt befejezése**), where the seller can also request a one-time email copy of the Sheet-stored report.
+The USB reader asks for the invitation code and consent to save test data to the buyer's private Sheet before reading. Once reading finishes, the backend saves the USB data to the Sheet without sending any email to the buyer. There is no clipboard copying or data pasting. After saving USB data, the reader offers an optional battery stress test (during 1080p 60fps video playback, with configurable duration in minutes and sampling interval in seconds, default 5 min / 1 s), which also checks USB audio/video output activity, physical buttons (volume, Home, lock), accelerometer movement, Wi-Fi signal strength (RSSI), and SIM/modem, NAND, and Touch ID status: samples are synced in batches to the `Akku mérés` sheet tab, and the summary is added to the USB section in `Tesztlépések` and the final report. If the seller provided an email address, the backend immediately sends the clickable Safari continuation link (`#CODE.SESSION`) there so no link typing or copy-pasting is needed on the iPad. On the device being sold (using the `#CODE` or `#CODE.SESSION` link), after consent, browser test steps and partial results are saved to the Sheet as they happen; the combined report is finalized and displayed after preview approval and **Finish test** (**Teszt befejezése**), where the seller can also request a one-time email copy of the Sheet-stored report.
 
-An optional seller email report can be requested once at the start: in the reader before reading on iPad/iPhone, or when starting the browser test on a Mac. The address is kept only in memory until delivery (in the running reader or the Mac browser tab); it is never written to the Sheet, ScriptProperties, CacheService, application logs, or browser storage, and is excluded from reports and URLs. At the end, a single combined (or incomplete, if interrupted) report is sent to the seller. The email provider necessarily processes recipient addresses for delivery and its own mail records.
+An optional seller email address can be requested at the start: in the reader before reading on iPad/iPhone (this is where the direct Safari continuation link arrives as well, followed by the combined report at the end), or when starting the browser test on a Mac. The address is kept only in memory until delivery (in the running reader or the Mac browser tab); it is never written to the Sheet, ScriptProperties, CacheService, application logs, or browser storage, and is excluded from reports and URLs. At the end, a single combined (or incomplete, if interrupted) report is sent to the seller. The email provider necessarily processes recipient addresses for delivery and its own mail records.
 
 ### How can you check this?
 
@@ -46,7 +46,7 @@ There are two modes:
 
 Missing USB fields and unsupported browser tests are marked unknown/not tested, not as hardware faults. Data from a seller-controlled computer is not cryptographic proof.
 
-Data path: USB reader and the device browser -> Google Apps Script (`Meghívók` and `Tesztlépések` sheets); at the end, a combined report and—if requested at the beginning—a single seller email. An uncertain email delivery is not automatically repeated.
+Data path: USB reader and the device browser -> Google Apps Script (`Meghívók` and `Tesztlépések` sheets); at the end, a combined report and (if requested at the beginning) a single seller email. An uncertain email delivery is not automatically repeated.
 
 The daily mail allowance is 20 emails (`DAILY_MAILS`).
 
@@ -57,7 +57,7 @@ The Safari-opening attempt requires Web Inspector, not Remote Automation. The pr
 - In the receiving program's battery report, the `OriginalBattery` system log value does not verify battery authenticity, whether it was replaced, or whether the service was authorized. If the value is missing, the origin is unknown. The battery manufacturer and service history are not currently verified.
 - The iPad file reader in the wizard relies on assumed field names (`Last_Value_CycleCount`, `MaximumCapacityPercent`) and still needs to be checked against a real file.
 - The `system_profiler` key names used by the Mac command still need to be checked on a real Mac.
-- The in-browser hardware test (touch, motion, audio, camera, display) is part of the wizard. Touch, camera and microphone still need checking on a real device. A test for the buttons and the headphone jack does not exist yet.
+- The in-browser hardware test (touch grid, 3-axis motion and gyroscope, audio, camera, display) is part of the wizard. Touch, camera, and microphone still need checking on a real device. Physical buttons (volume, Home, lock) are monitored during the USB battery stress test; a test for the headphone jack does not exist yet.
 - The seller USB report and web test report can be sent separately using the same invitation. The previous flow gallery documents the older, single-report process; the new flow has a separate integration test.
 - The wizard targets Safari 9.1 (iOS 9.3.5) and newer, so it uses ES5 only, without `fetch` or `TextEncoder`. The iOS 9.3.5 menu names were checked on a real iPad, the names for other versions come from Apple's Hungarian pages and guides and still need checking on real devices.
 
@@ -91,7 +91,7 @@ Start the web page:
 npm start
 ```
 
-Start the USB reader: after the invitation code, consent, and optional seller email address, it reads the device, asks the backend to save the USB data in the Sheet, and tries to navigate the device's Safari to the audit page. Continue web tests on the device being sold. If Safari opening fails, the program prints a prominent heading, separator lines, and the `#CODE.SESSION` continuation URL on its own line, then stays open to follow the web test steps and trigger the combined seller email at the end if requested. The reader does not open a computer browser or start a local web server.
+Start the USB reader: after the invitation code, consent, and optional seller email address, it reads the device, asks the backend to save the USB data in the Sheet, and tries to navigate the device's Safari to the audit page. Continue web tests on the device being sold. If Safari opening fails, the program prints a prominent heading, separator lines, and the `#CODE.SESSION` continuation URL on its own line (if the seller provided an email address, the backend immediately sends the clickable link there as well), then stays open to follow the web test steps and trigger the combined seller email at the end if requested. The reader does not open a computer browser or start a local web server.
 
 ```bash
 npm run usb

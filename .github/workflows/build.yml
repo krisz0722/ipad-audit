@@ -59,6 +59,10 @@ jobs:
               cp dist/ipad-audit-reader.exe "out/ipad-audit-reader-${{ matrix.name }}.exe"
               python -c "import shutil; shutil.make_archive('out/ipad-audit-reader-${{ matrix.name }}-folder', 'zip', 'dist/ipad-audit-reader-folder')"
               ;;
+            linux-*)
+              tar -czf "out/ipad-audit-reader-${{ matrix.name }}.tar.gz" -C dist ipad-audit-reader
+              bash scripts/package-deb.sh dist/ipad-audit-reader "out/ipad-audit-reader-${{ matrix.name }}.deb" "${GITHUB_REF_NAME#v}"
+              ;;
             *)
               tar -czf "out/ipad-audit-reader-${{ matrix.name }}.tar.gz" -C dist ipad-audit-reader
               ;;

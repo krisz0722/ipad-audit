@@ -1,7 +1,7 @@
 // iPad audit fogadó. Google Táblához kötött Apps Script.
 // Meghívó nélkül semmit nem fogad el és emailt sem küld.
 
-var BACKEND_VERSION = "2026.11.14.1";
+var BACKEND_VERSION = "2026.11.14.2";
 var SHEET_NAME = "Meghívók";
 var INVITE_HOURS = 72;
 var MAX_BODY = 60000;
@@ -683,6 +683,87 @@ function auditEmail_(body) {
   }
 }
 
+function auditLink_(body) {
+  var session = auditSession_(body);
+  if (session.invite.values[AUDIT_COLUMNS.state - 1] !== "running")
+    auditError_("A teszt már lezárult.");
+  var events = auditEvents_(session);
+  if (
+    !events.some(function (row) {
+      return row[3] === "usb";
+    })
+  )
+    auditError_("A link küldéséhez előbb USB-kiolvasás szükséges.");
+  if (typeof body.email !== "string") auditError_("Hibás emailcím.");
+  var email = body.email.trim();
+  if (
+    !email ||
+    email.length > 254 ||
+    /[^\x21-\x7e]/.test(email) ||
+    !/^[^\s@,;<>:"\\]+@[^\s@,;<>:"\\]+\.[^\s@,;<>:"\\]+$/.test(email)
+  )
+    auditError_("Hibás emailcím.");
+  var mailState = session.invite.values[AUDIT_COLUMNS.mail - 1];
+  if (mailState === "sent" || mailState === "link_sent")
+    return json_({ ok: true, duplicate: true, linkSent: true });
+  if (mailState === "sending")
+    auditError_(
+      "Az emailküldés eredménye bizonytalan. Ellenőrizd a postaládát; nem küldjük újra automatikusan.",
+    );
+  var props = PropertiesService.getScriptProperties();
+  var dayKey =
+    "mails:" + Utilities.formatDate(new Date(), "Etc/UTC", "yyyy-MM-dd");
+  var count = Number(props.getProperty(dayKey) || 0);
+  if (count >= DAILY_MAILS || MailApp.getRemainingDailyQuota() < 1)
+    auditError_(
+      "Elérte a napi emailkeretet. Az oldalt a megadott címen nyithatod meg.",
+    );
+  var link = SITE_URL + "#" + session.code + "." + session.sid;
+  var label = String(session.invite.values[COLS.label - 1] || "")
+    .replace(/[\r\n]/g, " ")
+    .slice(0, 80);
+  var text =
+    "Az iPad / iPhone állapot-ellenőrzés folytatása ezen az eszközön:\n\n" +
+    link +
+    "\n\nMeghívókód: " +
+    groupCode_(session.code) +
+    "\n\nA webes hardverteszteket ezen az eszközön végezd el. Az eredményeket folyamatosan mentjük a Google Sheetbe. A teszt legvégén az összesített riportot is elküldjük.\n";
+  var html =
+    '<div style="font:14px/1.5 Arial,sans-serif;color:#202124">' +
+    '<h2 style="color:#1a73e8;margin:0 0 16px">iPad audit: folytasd az eladandó eszközön</h2>' +
+    "<p>A számítógépes USB-kiolvasás és az akkumulátor-terhelésteszt befejeződött. Az eladandó iPaden vagy iPhone-on koppints az alábbi linkre a tesztek folytatásához:</p>" +
+    '<p style="margin:20px 0"><a href="' +
+    esc_(link) +
+    '" style="background:#1a73e8;color:#fff;text-decoration:none;padding:12px 20px;border-radius:6px;font-weight:600;display:inline-block">Webes tesztek megnyitása</a></p>' +
+    '<p style="color:#5f6368;font-size:12px">Ha a gomb nem kattintható, másold ezt a linket a Safariba:<br><a href="' +
+    esc_(link) +
+    '" style="color:#1a73e8">' +
+    esc_(link) +
+    "</a></p>" +
+    '<p style="color:#5f6368;font-size:12px">Meghívókód: <b>' +
+    esc_(groupCode_(session.code)) +
+    "</b></p>" +
+    "</div>";
+  props.setProperty(dayKey, String(count + 1));
+  try {
+    MailApp.sendEmail({
+      to: email,
+      subject: "iPad audit folytatása: " + (label || session.code),
+      body: text,
+      htmlBody: html,
+    });
+    session.sheet
+      .getRange(session.invite.row, AUDIT_COLUMNS.mail)
+      .setValue("link_sent");
+    session.sheet
+      .getRange(session.invite.row, AUDIT_COLUMNS.emailRequested)
+      .setValue(true);
+    return json_({ ok: true, linkSent: true });
+  } catch (error) {
+    auditError_("Az emailküldés nem sikerült.");
+  }
+}
+
 function auditBatterySheet_() {
   var book = SpreadsheetApp.getActive();
   var sheet = book.getSheetByName("Akku mérés");
@@ -991,6 +1072,7 @@ function auditDispatch_(body) {
     if (body.action === "audit_event") return auditEvent_(body);
     if (body.action === "audit_battery") return auditBattery_(body);
     if (body.action === "audit_status") return auditStatus_(body);
+    if (body.action === "audit_link") return auditLink_(body);
     if (body.action === "audit_email") return auditEmail_(body);
     return fail_("Ismeretlen tesztművelet.");
   } catch (error) {

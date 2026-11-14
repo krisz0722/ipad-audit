@@ -15,7 +15,7 @@ const SECTIONS = [
 test("a deployment check jogosultságot ellenőriz, nem készít meghívót és nem küld emailt", () => {
   const backend = makeBackend();
   const result = backend.context.checkDeployment();
-  assert.strictEqual(result.version, "2026.11.14.1");
+  assert.strictEqual(result.version, "2026.11.14.2");
   assert.strictEqual(result.invitationSheetAvailable, true);
   assert.strictEqual(result.recipientAvailable, true);
   assert.strictEqual(result.remainingMailQuota, 100);
@@ -330,6 +330,101 @@ test("audit: egy összesített email csak az eladónak megy, címmentés nélkü
     }),
     /seller@example\.test/,
   );
+});
+
+test("audit: a folytatólink emailben kiküldhető az eladónak címmentés nélkül, majd a végső riport is kimegy", () => {
+  const backend = makeBackend();
+  beginAudit(backend, true);
+  assert.strictEqual(
+    backend.call({
+      action: "audit_link",
+      code: "123456789",
+      sid: AUDIT_SID,
+      email: "seller@example.test",
+    }).ok,
+    false,
+  );
+  assert.strictEqual(
+    backend.call({
+      action: "audit_event",
+      code: "123456789",
+      sid: AUDIT_SID,
+      seq: 1,
+      step: "usb",
+      status: "ok",
+      sections: SECTIONS,
+    }).ok,
+    true,
+  );
+  assert.strictEqual(
+    backend.call({
+      action: "audit_link",
+      code: "123456789",
+      sid: AUDIT_SID,
+      email: "invalid-email",
+    }).ok,
+    false,
+  );
+  const linkResult = backend.call({
+    action: "audit_link",
+    code: "123456789",
+    sid: AUDIT_SID,
+    email: "seller@example.test",
+  });
+  assert.strictEqual(linkResult.ok, true);
+  assert.strictEqual(linkResult.linkSent, true);
+  assert.strictEqual(backend.mails.length, 1);
+  assert.strictEqual(backend.mails[0].to, "seller@example.test");
+  assert.match(backend.mails[0].subject, /iPad audit folytatása/);
+  assert.match(
+    backend.mails[0].body,
+    /#123456789\.0123456789ABCDEF0123456789ABCDEF/,
+  );
+  assert.match(
+    backend.mails[0].htmlBody,
+    /#123456789\.0123456789ABCDEF0123456789ABCDEF/,
+  );
+  const duplicate = backend.call({
+    action: "audit_link",
+    code: "123456789",
+    sid: AUDIT_SID,
+    email: "seller@example.test",
+  });
+  assert.strictEqual(duplicate.ok, true);
+  assert.strictEqual(duplicate.duplicate, true);
+  assert.strictEqual(duplicate.linkSent, true);
+  assert.strictEqual(backend.mails.length, 1);
+  assert.doesNotMatch(
+    JSON.stringify({
+      rows: backend.rows,
+      events: backend.eventRows,
+      cache: Array.from(backend.cache),
+      props: Array.from(backend.props),
+    }),
+    /seller@example\.test/,
+  );
+  assert.strictEqual(
+    backend.call({
+      action: "audit_event",
+      code: "123456789",
+      sid: AUDIT_SID,
+      seq: 2,
+      step: "finish",
+      status: "ok",
+      sections: SECTIONS,
+    }).ok,
+    true,
+  );
+  const finalMail = backend.call({
+    action: "audit_email",
+    code: "123456789",
+    sid: AUDIT_SID,
+    email: "seller@example.test",
+  });
+  assert.strictEqual(finalMail.ok, true);
+  assert.strictEqual(finalMail.emailSent, true);
+  assert.strictEqual(backend.mails.length, 2);
+  assert.match(backend.mails[1].subject, /összesített riport/);
 });
 
 test("audit: kérés nélkül, teszt közben vagy hibás címre nem küld emailt", () => {

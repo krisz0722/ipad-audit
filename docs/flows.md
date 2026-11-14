@@ -67,6 +67,8 @@ flowchart TD
   R -->|"beleegyezés és Küldés (7. fejezet)"| DONE["Köszönjük"]
 ```
 
+Ha az eladó a folytatólinkkel (`#KÓD.SESSION`) nyitja meg az oldalt az iPaden vagy iPhone-on (vagy a böngésző közvetlenül iOS-t érzékel), az oldal automatikusan a webes hardverteszt bevezetéséhez lép (`web_intro`), így nem kell újra eszköztípust választani.
+
 ## 3. iPad és iPhone: az akku adat
 
 ```mermaid
@@ -108,12 +110,12 @@ Minden tesztnél három kimenet lehet: lefut (eredmény), kihagyja az eladó, va
 | Billentyűzet (Mac)        | minden billentyű lenyomásra kigyullad, ANSI vagy ISO kiosztás, a felső funkciósor csak az Fn-nel, a dupla leütés gyanút jelzi                         | mért                | minden modern böngészőben (kell a billentyű fizikai kódja) |
 | Egér és trackpad (Mac)    | a kurzor rácson, öt kattintási pont (a sarkok is), jobb kattintás, görgetés fel és le. Nem kötelező: vízszintes görgetés, csippentés, dupla kattintás | mért                | minden modern böngészőben                                  |
 | Érintőképernyő            | 8x12 mezős rács, minden mezőt érzékelni kell, a végén két ujj                                                                                         | mért                | iOS 9-től                                                  |
-| Mozgásérzékelők           | a gyorsulás tartománya mindkét tengelyen és a forgás                                                                                                  | mért                | iOS 9-től (iOS 13-tól engedélyt kér)                       |
+| Mozgásérzékelők           | 3 tengelyes gyorsulás (X, Y, Z) és mindkét irányú forgás (giroszkóp)                                                                                  | mért                | iOS 9-től (iOS 13-tól engedélyt kér)                       |
 | Hangszóró és mikrofon     | négy hangjelzés a bal és a jobb csatornán, a mikrofon meghallja-e                                                                                     | mért                | iOS 11-től                                                 |
 | Hátlapi és előlapi kamera | élő, nem egyszínű kép érkezik-e                                                                                                                       | mért                | iOS 11-től                                                 |
 | Kijelző színei            | hat szín, az eladó jelzi, ha hibát lát                                                                                                                | bemondás            | iOS 9-től                                                  |
 
-A billentyűzet teszt nem látja az Fn, a hangerő, a fényerő és a Touch ID billentyűt, mert a rendszer elnyeli őket. A gombok, a fejhallgató-aljzat és a töltőport tesztje nincs meg. A kamera, a mikrofon és az érintővezérlő jelenléte USB-n át kiolvasható lenne, de a működésüket nem bizonyítja. Ez még nincs beépítve.
+A billentyűzet teszt nem látja az Fn, a hangerő, a fényerő és a Touch ID billentyűt, mert a rendszer elnyeli őket. A fizikai gombokat (hangerő, Home, bekapcsológomb) az USB-s akkumulátor-terhelésteszt figyeli; a fejhallgató-aljzat és a töltőport tesztje nincs meg. A kamera, a mikrofon és az érintővezérlő jelenléte USB-n át kiolvasható lenne, de a működésüket nem bizonyítja. Ez még nincs beépítve.
 
 ## 5. Az USB-s program ajánlata és a számítógépes ág
 

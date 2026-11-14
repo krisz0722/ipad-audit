@@ -47,7 +47,10 @@
       ['ipad-audit-reader-windows-x86_64-folder.zip', 'Windows, mappa (ha a vírusirtó jelez)']],
     mac: [['ipad-audit-reader-macos-arm64.tar.gz', 'Mac Apple chippel (M1 és újabb)'],
       ['ipad-audit-reader-macos-x86_64.tar.gz', 'Mac Intel processzorral']],
-    linux: [['ipad-audit-reader-linux-x86_64.tar.gz', 'Linux']]
+    linux: [
+      ['ipad-audit-reader-linux-x86_64.deb', 'Ubuntu / Debian / Mint (.deb telepítő)'],
+      ['ipad-audit-reader-linux-x86_64.tar.gz', 'Linux, hordozható archívum (tar.gz)']
+    ]
   };
   // A letöltési mappa: a GitHub release legfrissebb kiadása. A config.js-ben a USB_TOOL_URL felülírhatja.
   var TOOL_BASE = window.USB_TOOL_URL || 'https://github.com/krisz0722/ipad-audit/releases/latest/download/';
@@ -1291,6 +1294,10 @@ SCREENS.usb_get = function () {
       "</pre>" +
       '<button type="button" class="btn small" id="copy-mac">Parancs másolása</button><span class="muted" id="copied-mac"></span></div>';
   }
+  if (os === "linux" || !os) {
+    notes +=
+      '<div class="note"><b>Linux (Ubuntu, Linux Mint, Debian):</b> a letöltött <b>.deb</b> fájlra kattints duplán a letöltések között. A felugró ablakban kattints a <b>Telepítés</b> gombra. A telepítés után az alkalmazásmenüből vagy a keresőből az <b>iPad Audit</b> ikonra kattintva a program automatikusan elindul egy saját ablakban.</div>';
+  }
   var why =
     "<h2>Miért kell ez a program a számítógépre?</h2>" +
     "<p>Az iPad és az iPhone böngészője biztonsági okokból nem fér hozzá az akkumulátor valódi töltési ciklusaihoz, a gyári és jelenlegi kapacitáshoz, a sorozatszámhoz és az Aktiválási zár állapotához. Ezeket az adatokat kizárólag USB-kábelen, az Apple diagnosztikai protokollján keresztül lehet pontosan kiolvasni.</p>" +
@@ -1354,7 +1361,9 @@ SCREENS.usb_run = function () {
       ? "Kattints duplán a letöltött fájlra (a mappás változatnál előbb csomagold ki, és az <b>ipad-audit-reader.exe</b> fájlt indítsd)."
       : os === "mac"
         ? "Ha a Terminál-parancsot használtad, a program már fut. Különben nyisd meg a Terminált, és indítsd a letöltött programot."
-        : "Csomagold ki a letöltött fájlt, és indítsd el a programot egy terminálból.";
+        : os === "linux"
+          ? "Ha a .deb csomagot telepítetted, indítsd el az <b>iPad Audit</b> ikont az alkalmazásaid közül (automatikusan megnyílik a futtatóablak). Ha a tar.gz archívumot választottad, csomagold ki és indítsd el a terminálból."
+          : "Csomagold ki a letöltött fájlt, és indítsd el a programot egy terminálból.";
   show(
     top() +
       progress(2) +

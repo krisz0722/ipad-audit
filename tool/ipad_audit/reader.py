@@ -182,7 +182,7 @@ def main(argv=None):
     print("A Safari-megnyitási próba közben a könyvtár átmenetileg megkapja a nyitott inspectálható appok és tabok címét, URL-jét. Ezt nem mentjük, nem küldjük el; oldaltartalmat és böngészési előzményt nem kérünk le.", file=sys.stderr)
     if input("Beleegyezel a kiolvasásba és a tesztadatok Sheetbe mentésébe? [Igen/nem, Enter: igen]: ").strip().lower() not in ("", "igen", "yes"):
         return 0
-    print("Szeretnéd a végén emailben megkapni az összesített riportot? Ha igen, add meg a címed; ha nem, nyomj Entert. A címet csak a program memóriájában tartjuk a teszt végéig.", file=sys.stderr)
+    print("Add meg az emailcímedet: a számítógépes mérés után oda küldjük a kattintható linket az iPaden folytatandó teszthez, és a végén az összesített riportot is. A címet csak a program memóriájában tartjuk a teszt végéig.", file=sys.stderr)
     while True:
         copy_email = input("Email az összesített riporthoz (nem kötelező, Enter: nem kérem): ").strip()
         if not copy_email or (
@@ -228,6 +228,12 @@ def main(argv=None):
         pause()
         return 1
     battery_test.run_interactive(backend, code, sid, notify, ask=input)
+    if copy_email:
+        try:
+            backend.audit_link(code, sid, copy_email)
+            print("A folytatólinket kiküldtük az emailcímedre. Nyisd meg a levelet az iPaden, és koppints a linkre!", file=sys.stderr)
+        except BackendError as error:
+            print("A folytatólink email küldése nem sikerült (%s); a webes tesztet az alábbi linkkel folytathatod." % error, file=sys.stderr)
     print("A webes teszteket az iPaden vagy iPhone-on kell elvégezni. Megpróbálom ott megnyitni a Safarit...", file=sys.stderr)
     if reader_web.open_on_device(code, base_url=web_url, sid=sid):
         print("A Safari elfogadta az audit oldal megnyitását. A programot hagyd nyitva a teszt végéig.", file=sys.stderr)

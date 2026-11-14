@@ -44,7 +44,10 @@
       ['ipad-audit-reader-windows-x86_64-folder.zip', 'Windows, mappa (ha a vírusirtó jelez)']],
     mac: [['ipad-audit-reader-macos-arm64.tar.gz', 'Mac Apple chippel (M1 és újabb)'],
       ['ipad-audit-reader-macos-x86_64.tar.gz', 'Mac Intel processzorral']],
-    linux: [['ipad-audit-reader-linux-x86_64.tar.gz', 'Linux']]
+    linux: [
+      ['ipad-audit-reader-linux-x86_64.deb', 'Ubuntu / Debian / Mint (.deb telepítő)'],
+      ['ipad-audit-reader-linux-x86_64.tar.gz', 'Linux, hordozható archívum (tar.gz)']
+    ]
   };
   // A letöltési mappa: a GitHub release legfrissebb kiadása. A config.js-ben a USB_TOOL_URL felülírhatja.
   var TOOL_BASE = window.USB_TOOL_URL || 'https://github.com/krisz0722/ipad-audit/releases/latest/download/';
