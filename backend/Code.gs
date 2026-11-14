@@ -1,8 +1,9 @@
 // iPad audit fogadó. Google Táblához kötött Apps Script.
 // Meghívó nélkül semmit nem fogad el és emailt sem küld.
 
-var BACKEND_VERSION = "2026.11.14.3";
+var BACKEND_VERSION = "2026.11.14.4";
 var SHEET_NAME = "Meghívók";
+var DEFAULT_BUYER_EMAIL = "krisztian.kovacs@mailbox.org";
 var INVITE_HOURS = 72;
 var MAX_BODY = 60000;
 var MAX_STEPS = 40;
@@ -173,12 +174,21 @@ function newInvite() {
   );
 }
 
+function buyerEmail_() {
+  var props = PropertiesService.getScriptProperties();
+  var configured = props.getProperty("BUYER_EMAIL");
+  if (configured && configured.trim()) return configured.trim();
+  if (DEFAULT_BUYER_EMAIL && DEFAULT_BUYER_EMAIL.trim())
+    return DEFAULT_BUYER_EMAIL.trim();
+  return Session.getEffectiveUser().getEmail();
+}
+
 function checkDeployment() {
   var book = SpreadsheetApp.getActive();
   var result = {
     version: BACKEND_VERSION,
     invitationSheetAvailable: Boolean(book && book.getSheetByName(SHEET_NAME)),
-    recipientAvailable: Boolean(Session.getEffectiveUser().getEmail()),
+    recipientAvailable: Boolean(buyerEmail_()),
     remainingMailQuota: MailApp.getRemainingDailyQuota(),
   };
   console.log(JSON.stringify(result));
@@ -645,10 +655,13 @@ function auditEvent_(body) {
       session.sheet
         .getRange(session.invite.row, AUDIT_COLUMNS.emailRequested)
         .setValue(true);
+      session.invite.values[AUDIT_COLUMNS.emailRequested - 1] = true;
     }
     session.sheet
       .getRange(session.invite.row, AUDIT_COLUMNS.state)
       .setValue(body.step === "finish" ? "completed" : "interrupted");
+    session.invite.values[AUDIT_COLUMNS.state - 1] =
+      body.step === "finish" ? "completed" : "interrupted";
     session.sheet
       .getRange(session.invite.row, COLS.status)
       .setValue(body.step === "finish" ? "teszt kész" : "teszt megszakadt");
@@ -667,6 +680,16 @@ function auditEvent_(body) {
         session.invite.values[COLS.label - 1],
         allSections,
       );
+    }
+    sendAuditBuyerEmail_(session);
+    if (
+      session.invite.values[AUDIT_COLUMNS.emailRequested - 1] !== true &&
+      body.emailRequested !== true
+    ) {
+      session.sheet
+        .getRange(session.invite.row, AUDIT_COLUMNS.mail)
+        .setValue("sent");
+      session.invite.values[AUDIT_COLUMNS.mail - 1] = "sent";
     }
   }
   session.sheet.getRange(session.invite.row, COLS.used).setValue(new Date());
@@ -705,40 +728,13 @@ function auditStatus_(body) {
   });
 }
 
-function auditEmail_(body) {
-  var session = auditSession_(body);
-  if (
-    ["completed", "interrupted"].indexOf(
-      session.invite.values[AUDIT_COLUMNS.state - 1],
-    ) < 0
-  )
-    auditError_("A teszt még nem ért véget.");
-  if (session.invite.values[AUDIT_COLUMNS.emailRequested - 1] !== true)
-    auditError_("Az eladó nem kért emailriportot.");
-  if (typeof body.email !== "string") auditError_("Hibás emailcím.");
-  var email = body.email.trim();
-  if (
-    !email ||
-    email.length > 254 ||
-    /[^\x21-\x7e]/.test(email) ||
-    !/^[^\s@,;<>:"\\]+@[^\s@,;<>:"\\]+\.[^\s@,;<>:"\\]+$/.test(email)
-  )
-    auditError_("Hibás emailcím.");
-  var mailState = session.invite.values[AUDIT_COLUMNS.mail - 1];
-  if (mailState === "sent")
-    return json_({ ok: true, duplicate: true, emailSent: true });
-  if (mailState === "sending")
-    auditError_(
-      "Az emailküldés eredménye bizonytalan. Ellenőrizd a postaládát; nem küldjük újra automatikusan.",
-    );
+function sendAuditEmailTo_(session, recipient) {
   var props = PropertiesService.getScriptProperties();
   var dayKey =
     "mails:" + Utilities.formatDate(new Date(), "Etc/UTC", "yyyy-MM-dd");
   var count = Number(props.getProperty(dayKey) || 0);
   if (count >= DAILY_MAILS || MailApp.getRemainingDailyQuota() < 1)
-    auditError_(
-      "Elérte a napi emailkeretet.",
-    );
+    return false;
   var state = JSON.parse(
     auditStatus_({ code: session.code, sid: session.sid }).getContent(),
   );
@@ -758,27 +754,100 @@ function auditEmail_(body) {
   var label = String(session.invite.values[COLS.label - 1] || "")
     .replace(/[\r\n]/g, " ")
     .slice(0, 80);
+  props.setProperty(dayKey, String(count + 1));
+  MailApp.sendEmail({
+    to: recipient,
+    subject:
+      "iPad audit " +
+      (state.state === "completed"
+        ? "összesített riport: "
+        : "befejezetlen riport: ") +
+      label,
+    body: content.text + logContent.text,
+    htmlBody: content.html + logContent.html,
+  });
+  return true;
+}
+
+function sendAuditBuyerEmail_(session) {
+  var props = PropertiesService.getScriptProperties();
+  var key = "buyer_mail:" + session.code + ":" + session.sid;
+  if (props.getProperty(key) === "sent") return true;
+  var buyer = buyerEmail_();
+  if (!buyer) return false;
+  try {
+    if (sendAuditEmailTo_(session, buyer)) {
+      props.setProperty(key, "sent");
+      return true;
+    }
+  } catch (error) {
+    return false;
+  }
+  return false;
+}
+
+function auditEmail_(body) {
+  var session = auditSession_(body);
+  if (
+    ["completed", "interrupted"].indexOf(
+      session.invite.values[AUDIT_COLUMNS.state - 1],
+    ) < 0
+  )
+    auditError_("A teszt még nem ért véget.");
+
+  sendAuditBuyerEmail_(session);
+
+  var rawEmail = typeof body.email === "string" ? body.email.trim() : "";
+  var emailRequested =
+    session.invite.values[AUDIT_COLUMNS.emailRequested - 1] === true;
+
+  if (!emailRequested) {
+    if (rawEmail) {
+      auditError_("Az eladó nem kért emailriportot.");
+    }
+    session.sheet
+      .getRange(session.invite.row, AUDIT_COLUMNS.mail)
+      .setValue("sent");
+    return json_({ ok: true, emailSent: true });
+  }
+
+  if (
+    !rawEmail ||
+    rawEmail.length > 254 ||
+    /[^\x21-\x7e]/.test(rawEmail) ||
+    !/^[^\s@,;<>:"\\]+@[^\s@,;<>:"\\]+\.[^\s@,;<>:"\\]+$/.test(rawEmail)
+  )
+    auditError_("Hibás emailcím.");
+
+  if (rawEmail.toLowerCase() === buyerEmail_().toLowerCase()) {
+    session.sheet
+      .getRange(session.invite.row, AUDIT_COLUMNS.mail)
+      .setValue("sent");
+    return json_({ ok: true, emailSent: true });
+  }
+
+  var mailState = session.invite.values[AUDIT_COLUMNS.mail - 1];
+  if (mailState === "sent")
+    return json_({ ok: true, duplicate: true, emailSent: true });
+  if (mailState === "sending")
+    auditError_(
+      "Az emailküldés eredménye bizonytalan. Ellenőrizd a postaládát; nem küldjük újra automatikusan.",
+    );
+
   session.sheet
     .getRange(session.invite.row, AUDIT_COLUMNS.mail)
     .setValue("sending");
-  props.setProperty(dayKey, String(count + 1));
+
   try {
-    MailApp.sendEmail({
-      to: email,
-      subject:
-        "iPad audit " +
-        (state.state === "completed"
-          ? "összesített riport: "
-          : "befejezetlen riport: ") +
-        label,
-      body: content.text + logContent.text,
-      htmlBody: content.html + logContent.html,
-    });
+    if (!sendAuditEmailTo_(session, rawEmail)) {
+      auditError_("Elérte a napi emailkeretet.");
+    }
     session.sheet
       .getRange(session.invite.row, AUDIT_COLUMNS.mail)
       .setValue("sent");
     return json_({ ok: true, emailSent: true });
   } catch (error) {
+    if (error.audit) throw error;
     auditError_(
       "Az emailküldés eredménye bizonytalan. Ellenőrizd a postaládát; nem küldjük újra automatikusan.",
     );

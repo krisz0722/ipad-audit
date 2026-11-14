@@ -15,7 +15,7 @@ const SECTIONS = [
 test("a deployment check jogosultságot ellenőriz, nem készít meghívót és nem küld emailt", () => {
   const backend = makeBackend();
   const result = backend.context.checkDeployment();
-  assert.strictEqual(result.version, "2026.11.14.3");
+  assert.strictEqual(result.version, "2026.11.14.4");
   assert.strictEqual(result.invitationSheetAvailable, true);
   assert.strictEqual(result.recipientAvailable, true);
   assert.strictEqual(result.remainingMailQuota, 100);
@@ -38,7 +38,7 @@ function beginAudit(backend, emailRequested = false) {
   assert.strictEqual(result.ok, true, result.error);
 }
 
-test("audit: a USB- és webes eredmény a Sheetbe kerül email nélkül", () => {
+test("audit: a USB- és webes eredmény a Sheetbe és a vevő emailjébe kerül", () => {
   const backend = makeBackend();
   beginAudit(backend);
   for (const [seq, step] of [
@@ -72,7 +72,8 @@ test("audit: a USB- és webes eredmény a Sheetbe kerül email nélkül", () => 
   );
   assert.strictEqual(backend.eventRows.length, 4);
   assert.strictEqual(backend.rows[1][3], "teszt kész");
-  assert.strictEqual(backend.mails.length, 0);
+  assert.strictEqual(backend.mails.length, 1);
+  assert.strictEqual(backend.mails[0].to, "krisztian.kovacs@mailbox.org");
 
   const reportSheet = backend.sheets.get("Riport - próba - 123456789");
   assert.ok(reportSheet, "a riport tab létrejön a teszt végén");
@@ -251,7 +252,9 @@ test("audit: a folyamat végén a finish lépésben is kérhető az összesítet
   });
   assert.strictEqual(mailResult.ok, true);
   assert.strictEqual(mailResult.emailSent, true);
-  assert.strictEqual(backend.mails.length, 1);
+  assert.strictEqual(backend.mails.length, 2);
+  assert.strictEqual(backend.mails[0].to, "krisztian.kovacs@mailbox.org");
+  assert.strictEqual(backend.mails[1].to, "seller@example.test");
 });
 
 test("audit: másik session nem olvashat, és a hiányzó lépés nem menthető", () => {
@@ -311,7 +314,7 @@ function completeAudit(backend, emailRequested = true) {
   }
 }
 
-test("audit: egy összesített email csak az eladónak megy, címmentés nélkül", () => {
+test("audit: az összesített email alapértelmezetten a vevőnek megy, és az eladónak is ha kérte", () => {
   const backend = makeBackend();
   completeAudit(backend);
   const payload = {
@@ -320,16 +323,17 @@ test("audit: egy összesített email csak az eladónak megy, címmentés nélkü
     sid: AUDIT_SID,
     email: "seller@example.test",
   };
-  assert.strictEqual(backend.mails.length, 0);
+  assert.strictEqual(backend.mails.length, 1);
+  assert.strictEqual(backend.mails[0].to, "krisztian.kovacs@mailbox.org");
   assert.strictEqual(backend.call(payload).emailSent, true);
   assert.strictEqual(backend.call(payload).duplicate, true);
-  assert.strictEqual(backend.mails.length, 1);
-  assert.strictEqual(backend.mails[0].to, "seller@example.test");
-  assert.strictEqual(backend.mails[0].bcc, undefined);
-  assert.strictEqual(backend.mails[0].cc, undefined);
-  assert.match(backend.mails[0].body, /USB-adatok/);
-  assert.match(backend.mails[0].body, /Webes tesztek/);
-  assert.match(backend.mails[0].body, /A teszt menete/);
+  assert.strictEqual(backend.mails.length, 2);
+  assert.strictEqual(backend.mails[1].to, "seller@example.test");
+  assert.strictEqual(backend.mails[1].bcc, undefined);
+  assert.strictEqual(backend.mails[1].cc, undefined);
+  assert.match(backend.mails[1].body, /USB-adatok/);
+  assert.match(backend.mails[1].body, /Webes tesztek/);
+  assert.match(backend.mails[1].body, /A teszt menete/);
   assert.doesNotMatch(
     JSON.stringify({
       rows: backend.rows,
@@ -432,11 +436,14 @@ test("audit: a folytatólink emailben kiküldhető az eladónak címmentés nél
   });
   assert.strictEqual(finalMail.ok, true);
   assert.strictEqual(finalMail.emailSent, true);
-  assert.strictEqual(backend.mails.length, 2);
-  assert.match(backend.mails[1].subject, /összesített riport/);
+  assert.strictEqual(backend.mails.length, 3);
+  assert.strictEqual(backend.mails[0].to, "seller@example.test");
+  assert.strictEqual(backend.mails[1].to, "krisztian.kovacs@mailbox.org");
+  assert.strictEqual(backend.mails[2].to, "seller@example.test");
+  assert.match(backend.mails[2].subject, /összesített riport/);
 });
 
-test("audit: kérés nélkül, teszt közben vagy hibás címre nem küld emailt", () => {
+test("audit: kérés nélkül, teszt közben vagy hibás címre nem küld emailt az eladónak", () => {
   const backend = makeBackend();
   beginAudit(backend, true);
   const payload = {
@@ -458,10 +465,11 @@ test("audit: kérés nélkül, teszt közben vagy hibás címre nem küld emailt
     "seller@example.test\r\nBcc: other@example.test",
   ])
     assert.strictEqual(completed.call({ ...payload, email }).ok, false);
-  assert.strictEqual(
-    backend.mails.length + declined.mails.length + completed.mails.length,
-    0,
-  );
+  assert.strictEqual(backend.mails.length, 0);
+  assert.strictEqual(declined.mails.length, 1);
+  assert.strictEqual(declined.mails[0].to, "krisztian.kovacs@mailbox.org");
+  assert.strictEqual(completed.mails.length, 1);
+  assert.strictEqual(completed.mails[0].to, "krisztian.kovacs@mailbox.org");
 });
 
 test("audit: bizonytalan emailküldés után nincs automatikus duplikálás", () => {
