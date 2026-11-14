@@ -15,17 +15,6 @@ BUTTON_NAMES = {
 BUTTON_ORDER = ("vol_up", "vol_down", "lock", "home")
 
 
-def ask_config(ask=input, notify=print):
-    notify("\n--- Fizikai gombok ellenőrzése (USB) ---")
-    try:
-        ans = ask("Szeretnéd a fizikai gombokat (Hangerő fel/le, Home, Bekapcsoló) USB-n ellenőrizni? [Enter: igen, 0: kihagyás]: ").strip().lower()
-    except (EOFError, StopIteration):
-        return False
-    if ans in ("0", "n", "nem", "no", "kihagy", "skip"):
-        return False
-    return True
-
-
 def build_section(signals):
     """Összefoglaló riportszakasz az érzékelt fizikai gombokból."""
     events = signals.events if signals else {}
@@ -58,7 +47,8 @@ async def collect_buttons(lockdown, notify, timeout=20, signals=None, clock=time
     syslog_task = asyncio.create_task(device.watch_syslog(lockdown, live_signals))
     reported = set()
     started = clock()
-    notify("\nNyomd meg sorban a gombokat az iPaden:")
+    notify("\n--- Fizikai gombok ellenőrzése (USB) ---")
+    notify("Nyomd meg sorban a gombokat az iPaden:")
     notify("  - Hangerő fel (+)")
     notify("  - Hangerő le (-)")
     notify("  - Bekapcsoló (Lock) gomb")
@@ -85,12 +75,8 @@ async def collect_buttons(lockdown, notify, timeout=20, signals=None, clock=time
     return build_section(live_signals)
 
 
-def run_interactive(backend, code, sid, notify, ask=input, lockdown_factory=None, clock=time.monotonic, wait=asyncio.sleep):
-    """Interaktív gombellenőrzés USB-n és mentés a Sheetbe."""
-    if not ask_config(ask=ask, notify=notify):
-        notify("A fizikai gombok USB-s ellenőrzése kihagyva.")
-        return None
-
+def run_interactive(backend, code, sid, notify, lockdown_factory=None, clock=time.monotonic, wait=asyncio.sleep, timeout=20):
+    """Kötelező gombellenőrzés USB-n és mentés a Sheetbe."""
     from ipad_audit import device
 
     async def _run():
@@ -101,7 +87,7 @@ def run_interactive(backend, code, sid, notify, ask=input, lockdown_factory=None
                 lockdown = await lockdown_factory()
         else:
             lockdown = await device.connect(notify)
-        return await collect_buttons(lockdown, notify, clock=clock, wait=wait)
+        return await collect_buttons(lockdown, notify, clock=clock, wait=wait, timeout=timeout)
 
     try:
         section = asyncio.run(_run())
@@ -115,7 +101,7 @@ def run_interactive(backend, code, sid, notify, ask=input, lockdown_factory=None
     notify(format_summary(section))
     if backend and code and sid:
         try:
-            status = "ok" if section["rows"][0]["status"] == "ok" else "skipped"
+            status = "ok" if section["rows"][0]["status"] == "ok" else "bad"
             backend.audit_event(code, sid, 2, "buttons", status, [section])
             notify("A gombellenőrzés eredményét a Sheetbe mentettük.")
         except BackendError as error:

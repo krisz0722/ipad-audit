@@ -115,20 +115,20 @@ SCREENS.hw_intro = function () {
     top() +
       progress(4) +
       "<h1>Hardverteszt</h1>" +
-      '<p class="lead">Gyors, kb. 2-3 perces ellenőrzés. Az oldal közvetlenül a beépített érzékelőket, a kamerákat, a kijelzőt és a fizikai gombokat teszteli. Nem kötelező, de segít igazolni az eszköz állapotát.</p>' +
+      '<p class="lead">Kötelező ellenőrzés a vásárló felé: az oldal közvetlenül a beépített érzékelőket, a kamerákat, a kijelzőt és a fizikai gombokat teszteli az eszköz állapotának igazolásához.</p>' +
       '<ul class="marks yes">' +
       items +
       "</ul>" +
       choice(
         "hw-go",
-        "Elkezdem a hardvertesztet",
-        "Kb. 2-3 perc.",
+        "Hardverteszt elvégzése",
+        "Kb. 2-3 perc az összes beépített komponens ellenőrzése.",
         false
       ) +
       choice(
         "hw-no",
         "Kihagyom a hardvertesztet",
-        'A riportban "nem tesztelt" jelzést kap.',
+        'Figyelem: a vásárló látni fogja a riportban, hogy a tesztet nem végezted el.',
         false
       ) +
       foot()

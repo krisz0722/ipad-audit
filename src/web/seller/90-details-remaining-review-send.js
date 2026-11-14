@@ -136,7 +136,7 @@ SCREENS.remaining = function () {
       '<ul class="marks open">' +
       open.join("") +
       "</ul>" +
-      "<p>Az akkumulátor és a zárt adatok pontos méréséhez USB-kábelen futtatható egy nyílt forráskódú kiolvasó a számítógépeden. Nem kötelező, te döntesz.</p>" +
+      "<p>Az akkumulátor és a zárt adatok pontos méréséhez USB-kábelen futtatható a nyílt forráskódú kiolvasó a számítógépeden.</p>" +
       choice(
         "r-yes",
         "Megnézem a programot",

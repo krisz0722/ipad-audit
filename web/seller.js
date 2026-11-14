@@ -1167,7 +1167,7 @@ SCREENS.welcome = function () {
     top() +
       "<h1>Az eszköz állapotának ellenőrzése</h1>" +
       (DEMO ? demoPanel() : "") +
-      '<p class="lead">Az ellenőrzés segít tisztázni az eszköz műszaki állapotát (különösen az akkumulátor valós kopását). Nem kötelező, bármikor megszakíthatod, és a program nyílt forráskódú.</p>' +
+      '<p class="lead">Az ellenőrzés segít tisztázni az eszköz műszaki állapotát (különösen az akkumulátor valós kopását és a hardver állapotát), a program pedig nyílt forráskódú.</p>' +
       '<div class="card"><h3>Hogyan működik?</h3><ol class="steps">' +
       "<li><b>Akkumulátor kiolvasása:</b> iPad és iPhone esetén USB-kábellel a számítógépen, Mac esetén egyetlen Terminál-paranccsal.</li>" +
       "<li><b>Webes hardverteszt:</b> Magán az eladandó eszközön gyorsan ellenőrizzük az érintést, mozgásérzékelőt, hangszórót és kamerákat.</li>" +
@@ -1435,7 +1435,7 @@ SCREENS.web_intro = function () {
     top() +
       progress(2) +
       "<h1>Webes tesztek indítása</h1>" +
-      '<p class="lead">Az USB-mérés megtörtént. Most magán az eszközön teszteljük az érintőképernyőt, mozgásérzékelőt, hangszórót, kamerákat és a kijelzőt. Kb. 2-3 percet vesz igénybe, és nem kötelező.</p>' +
+      '<p class="lead">Az USB-mérés megtörtént. Most magán az eszközön teszteljük az érintőképernyőt, mozgásérzékelőt, hangszórót, kamerákat, kijelzőt és a fizikai gombokat. Kb. 2-3 percet vesz igénybe.</p>' +
       '<div class="note">A teszt nem készít fotót, nem rögzít hangot és nem fér hozzá személyes adathoz. A rész-eredmények a vásárló private Sheetjébe mentődnek. A számítógépen futó programot hagyd nyitva a végéig.</div>' +
       '<label class="check"><input type="checkbox" id="audit-consent"' +
       (state.auditConsent ? " checked" : "") +
@@ -1895,20 +1895,20 @@ SCREENS.hw_intro = function () {
     top() +
       progress(4) +
       "<h1>Hardverteszt</h1>" +
-      '<p class="lead">Gyors, kb. 2-3 perces ellenőrzés. Az oldal közvetlenül a beépített érzékelőket, a kamerákat, a kijelzőt és a fizikai gombokat teszteli. Nem kötelező, de segít igazolni az eszköz állapotát.</p>' +
+      '<p class="lead">Kötelező ellenőrzés a vásárló felé: az oldal közvetlenül a beépített érzékelőket, a kamerákat, a kijelzőt és a fizikai gombokat teszteli az eszköz állapotának igazolásához.</p>' +
       '<ul class="marks yes">' +
       items +
       "</ul>" +
       choice(
         "hw-go",
-        "Elkezdem a hardvertesztet",
-        "Kb. 2-3 perc.",
+        "Hardverteszt elvégzése",
+        "Kb. 2-3 perc az összes beépített komponens ellenőrzése.",
         false
       ) +
       choice(
         "hw-no",
         "Kihagyom a hardvertesztet",
-        'A riportban "nem tesztelt" jelzést kap.',
+        'Figyelem: a vásárló látni fogja a riportban, hogy a tesztet nem végezted el.',
         false
       ) +
       foot()
@@ -3066,7 +3066,7 @@ SCREENS.remaining = function () {
       '<ul class="marks open">' +
       open.join("") +
       "</ul>" +
-      "<p>Az akkumulátor és a zárt adatok pontos méréséhez USB-kábelen futtatható egy nyílt forráskódú kiolvasó a számítógépeden. Nem kötelező, te döntesz.</p>" +
+      "<p>Az akkumulátor és a zárt adatok pontos méréséhez USB-kábelen futtatható a nyílt forráskódú kiolvasó a számítógépeden.</p>" +
       choice(
         "r-yes",
         "Megnézem a programot",

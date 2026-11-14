@@ -279,7 +279,7 @@ def main(argv=None):
         print("A USB-adatok mentése nem igazolt: " + str(error), file=sys.stderr)
         pause()
         return 1
-    button_test.run_interactive(backend, code, sid, notify, ask=input)
+    button_test.run_interactive(backend, code, sid, notify)
     battery_test.run_interactive(backend, code, sid, notify, ask=input)
     if copy_email:
         try:

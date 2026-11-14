@@ -11,20 +11,6 @@ from ipad_audit.backend import BackendError
 from ipad_audit.signals import Signals
 
 
-def test_ask_config_accepts_enter_and_rejects_zero():
-    messages = []
-    assert button_test.ask_config(ask=lambda prompt: "", notify=messages.append) is True
-    assert button_test.ask_config(ask=lambda prompt: "igen", notify=messages.append) is True
-    assert button_test.ask_config(ask=lambda prompt: "0", notify=messages.append) is False
-    assert button_test.ask_config(ask=lambda prompt: "nem", notify=messages.append) is False
-    assert button_test.ask_config(ask=lambda prompt: "kihagy", notify=messages.append) is False
-
-    def raise_eof(prompt):
-        raise EOFError()
-
-    assert button_test.ask_config(ask=raise_eof, notify=messages.append) is False
-
-
 def test_build_section_formats_detected_buttons():
     signals = Signals()
     section_empty = button_test.build_section(signals)
@@ -75,7 +61,7 @@ def test_collect_buttons_stops_early_when_all_buttons_detected():
     assert any("Minden fizikai gomb érzékelve" in msg for msg in messages)
 
 
-def test_run_interactive_saves_event_to_backend(monkeypatch):
+def test_run_interactive_runs_directly_and_saves_event(monkeypatch):
     messages = []
     sent = []
 
@@ -103,7 +89,6 @@ def test_run_interactive_saves_event_to_backend(monkeypatch):
         "123456789",
         "A" * 32,
         notify=messages.append,
-        ask=lambda prompt: "",
         lockdown_factory=fake_connect,
     )
     assert section is not None

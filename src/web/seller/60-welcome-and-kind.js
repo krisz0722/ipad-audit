@@ -62,7 +62,7 @@ SCREENS.welcome = function () {
     top() +
       "<h1>Az eszköz állapotának ellenőrzése</h1>" +
       (DEMO ? demoPanel() : "") +
-      '<p class="lead">Az ellenőrzés segít tisztázni az eszköz műszaki állapotát (különösen az akkumulátor valós kopását). Nem kötelező, bármikor megszakíthatod, és a program nyílt forráskódú.</p>' +
+      '<p class="lead">Az ellenőrzés segít tisztázni az eszköz műszaki állapotát (különösen az akkumulátor valós kopását és a hardver állapotát), a program pedig nyílt forráskódú.</p>' +
       '<div class="card"><h3>Hogyan működik?</h3><ol class="steps">' +
       "<li><b>Akkumulátor kiolvasása:</b> iPad és iPhone esetén USB-kábellel a számítógépen, Mac esetén egyetlen Terminál-paranccsal.</li>" +
       "<li><b>Webes hardverteszt:</b> Magán az eladandó eszközön gyorsan ellenőrizzük az érintést, mozgásérzékelőt, hangszórót és kamerákat.</li>" +

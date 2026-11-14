@@ -154,7 +154,7 @@ SCREENS.web_intro = function () {
     top() +
       progress(2) +
       "<h1>Webes tesztek indítása</h1>" +
-      '<p class="lead">Az USB-mérés megtörtént. Most magán az eszközön teszteljük az érintőképernyőt, mozgásérzékelőt, hangszórót, kamerákat és a kijelzőt. Kb. 2-3 percet vesz igénybe, és nem kötelező.</p>' +
+      '<p class="lead">Az USB-mérés megtörtént. Most magán az eszközön teszteljük az érintőképernyőt, mozgásérzékelőt, hangszórót, kamerákat, kijelzőt és a fizikai gombokat. Kb. 2-3 percet vesz igénybe.</p>' +
       '<div class="note">A teszt nem készít fotót, nem rögzít hangot és nem fér hozzá személyes adathoz. A rész-eredmények a vásárló private Sheetjébe mentődnek. A számítógépen futó programot hagyd nyitva a végéig.</div>' +
       '<label class="check"><input type="checkbox" id="audit-consent"' +
       (state.auditConsent ? " checked" : "") +
