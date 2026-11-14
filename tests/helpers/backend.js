@@ -22,6 +22,7 @@ function makeBackend(label) {
   };
   const sheets = new Map([["Meghívók", sheet]]);
   const eventRows = [];
+  const batteryRows = [];
   const out = (text) => ({
     text,
     getContent() {
@@ -45,11 +46,18 @@ function makeBackend(label) {
       getActive: () => ({
         getSheetByName: (name) => sheets.get(name) || null,
         insertSheet: (name) => {
+          const target = name === "Akku mérés" ? batteryRows : eventRows;
           const created = {
-            appendRow: (row) => eventRows.push(row),
+            appendRow: (row) => target.push(row),
             setFrozenRows: () => {},
             getDataRange: () => ({
-              getValues: () => eventRows.map((row) => row.slice()),
+              getValues: () => target.map((row) => row.slice()),
+            }),
+            getRange: (row, column) => ({
+              getValue: () => target[row - 1][column - 1],
+              setValue: (value) => {
+                target[row - 1][column - 1] = value;
+              },
             }),
           };
           sheets.set(name, created);
@@ -138,6 +146,7 @@ function makeBackend(label) {
     props,
     cache,
     eventRows,
+    batteryRows,
   };
 }
 

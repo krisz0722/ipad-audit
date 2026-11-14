@@ -156,7 +156,7 @@ def usb_sections(raw):
 
 
 def main(argv=None):
-    from ipad_audit import audit, config, reader_web
+    from ipad_audit import audit, battery_test, config, reader_web
     from ipad_audit.backend import Backend, BackendError
 
     parser = argparse.ArgumentParser()
@@ -227,6 +227,7 @@ def main(argv=None):
         print("A USB-adatok mentése nem igazolt: " + str(error), file=sys.stderr)
         pause()
         return 1
+    battery_test.run_interactive(backend, code, sid, notify, ask=input)
     print("A webes teszteket az iPaden vagy iPhone-on kell elvégezni. Megpróbálom ott megnyitni a Safarit...", file=sys.stderr)
     if reader_web.open_on_device(code, base_url=web_url, sid=sid):
         print("A Safari elfogadta az audit oldal megnyitását. A programot hagyd nyitva a teszt végéig.", file=sys.stderr)

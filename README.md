@@ -12,7 +12,7 @@ A kód nyilvános, hogy az eladó (és bárki) megnézhesse, pontosan mit olvas 
 
 | Kiolvassuk                                                                                | Soha nem olvassuk                                                 |
 | ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| akkumulátor ciklusszáma és maximális kapacitása                                           | jelszavak, Apple-fiók, az eszközön tárolt emailcímek, telefonszám |
+| akkumulátor ciklusszáma, maximális kapacitása és az opcionális terhelésteszt mérései      | jelszavak, Apple-fiók, az eszközön tárolt emailcímek, telefonszám |
 | eszköz típusa, USB-s hardverplatformja, tárhelye, rendszerverziója                        | fotók, üzenetek, névjegyek, fájlok                                |
 | az Apple-fiók kijelentkezési állapota (az eladó adja meg)                                 | appok és Safari tabok tartalma, böngészési előzmények             |
 | Macen: Aktiválási zár állapota, céges felügyelet igen/nem                                 | IMEI, eszköznév, helyadat, Wi-Fi hálózatok, MAC-címek, UDID       |
@@ -20,7 +20,7 @@ A kód nyilvános, hogy az eladó (és bárki) megnézhesse, pontosan mit olvas 
 | opcionálisan megadott emailcím, csak az összesített eladói riport egyszeri kézbesítéséhez | emailcím automatikus kiolvasása az eszközről                      |
 | Safari-megnyitásnál átmeneti app/tab metaadat: cím és URL, nem kerül a riportba           | Safari tab tartalma, cookie-k                                     |
 
-A USB-reader a kiolvasás előtt kéri a meghívókódot és a tesztadatok Sheetbe mentéséhez a beleegyezést. A kiolvasás után a backend a vásárló private Sheetjébe menti az USB-adatokat, a vásárlónak nem küld emailt. Nincs clipboard-másolás vagy adatbeillesztés. Az eladandó eszközön a beleegyezés után a webes tesztek lépéseit és rész-eredményeit folyamatosan mentjük a Sheetbe; a végén az előnézet jóváhagyása és a **Teszt befejezése** után készül el és jelenik meg az összesített riport.
+A USB-reader a kiolvasás előtt kéri a meghívókódot és a tesztadatok Sheetbe mentéséhez a beleegyezést. A kiolvasás után a backend a vásárló private Sheetjébe menti az USB-adatokat, a vásárlónak nem küld emailt. Nincs clipboard-másolás vagy adatbeillesztés. Az USB-mentés után a reader felajánlja az opcionális akkumulátor-terheléstesztet (1080p 60fps videólejátszás mellett, megadható perccel és másodperces mintavételi intervallummal, alapértelmezetten 5 perc / 1 mp): a mérések kötegelve az `Akku mérés` munkalapra, az összesítő pedig a `Tesztlépések` USB-szekciójába és a végső riportba kerül. Az eladandó eszközön a beleegyezés után a webes tesztek lépéseit és rész-eredményeit folyamatosan mentjük a Sheetbe; a végén az előnézet jóváhagyása és a **Teszt befejezése** után készül el és jelenik meg az összesített riport.
 
 Az induláskor egyszer kérhető eladói emailriport: iPad/iPhone esetén a reader elején, Mac esetén a böngészős tesztindításnál adható meg egy opcionális cím. A címet csak a küldésig tartjuk memóriában (a futó readerben vagy a Mac böngészőlapjában); nem írjuk Sheetbe, ScriptProperties-be, CacheService-be, alkalmazáslogba vagy browser storage-ba, és nem kerül a riportba vagy URL-be. A végén egyetlen összesített (vagy megszakadás esetén befejezetlen) riport megy az eladónak. A levelezőszolgáltató a kézbesítéshez és a saját levelezési naplóihoz szükségszerűen kezeli a címzettet.
 
@@ -29,7 +29,7 @@ Az induláskor egyszer kérhető eladói emailriport: iPad/iPhone esetén a read
 - [web/parse.js](web/parse.js): a kiolvasók. Csak előre felsorolt mezőket olvasnak, minden más adat figyelmen kívül marad. Itt készül a sorozatszám lenyomata és a riport szerkezete is.
 - [web/seller.js](web/seller.js): a varázsló. Hálózati kérés kizárólag a `send()` függvényen keresztül megy ki, az eladó beleegyezése után. A fájl az [src/web/seller/](src/web/seller/) mappa részeiből épül (egy egyszerű összefűzés, a működésen nem változtat), a kettő együtt van a repóban, és egy teszt őrzi, hogy mindig egyezzenek.
 - [web/index.html](web/index.html): az oldal harmadik fél scriptjét nem tölti be, csak a saját fájljait.
-- [backend/Code.gs](backend/Code.gs): a fogadó Google Apps Script. Meghívó nélkül semmit nem fogad el, a meghívó állapotát a `Meghívók`, a tesztlépéseket és riportadatokat a `Tesztlépések` munkalapon tárolja, és kérésre a végén egy összesített emailt küld az eladónak.
+- [backend/Code.gs](backend/Code.gs): a fogadó Google Apps Script. Meghívó nélkül semmit nem fogad el, a meghívó állapotát a `Meghívók`, a tesztlépéseket és riportadatokat a `Tesztlépések`, az akkumulátor-terhelésteszt idősoros méréseit pedig az `Akku mérés` munkalapon tárolja, és kérésre a végén egy összesített emailt küld az eladónak.
 
 Az Apps Script telepített változata nem ellenőrizhető kívülről, csak a repóban lévő fájl.
 
@@ -41,7 +41,7 @@ A USB-kiolvasás tartalmazza a teljes serialt, amelyhez a reader a kiolvasás el
 
 Két mód van:
 
-1. **Eladói flow** ([web/](web/), [tool/ipad_audit/reader.py](tool/ipad_audit/reader.py), [tool/ipad_audit/audit.py](tool/ipad_audit/audit.py)): a weboldal elmondja a menetet. A számítógépen futó USB-reader beleegyezés és opcionális eladói emailcím után elmenti az USB-adatokat a Sheetbe, majd megpróbálja az audit oldalt az iPaden/iPhone-on megnyitni (vagy kiírja a `#KÓD.SESSION` folytatólinket), és nyitva maradva követi a webes teszt lépéseit. A webes tesztek végén az összesített riport a Sheetbe kerül, és ha az eladó az elején kérte, a reader kiváltja az egyszeri összesített email küldését. A Mac útvonal továbbra is csak olvasó Terminal-parancsot használ.
+1. **Eladói flow** ([web/](web/), [tool/ipad_audit/reader.py](tool/ipad_audit/reader.py), [tool/ipad_audit/battery_test.py](tool/ipad_audit/battery_test.py), [tool/ipad_audit/audit.py](tool/ipad_audit/audit.py)): a weboldal elmondja a menetet. A számítógépen futó USB-reader beleegyezés és opcionális eladói emailcím után elmenti az USB-adatokat a Sheetbe, felajánlja az opcionális akkumulátor-terheléstesztet (1080p 60fps videó mellett, másodperces mintavétellel az `Akku mérés` munkalapra), majd megpróbálja az audit oldalt az iPaden/iPhone-on megnyitni (vagy kiírja a `#KÓD.SESSION` folytatólinket), és nyitva maradva követi a webes teszt lépéseit. A webes tesztek végén az összesített riport a Sheetbe kerül, és ha az eladó az elején kérte, a reader kiváltja az egyszeri összesített email küldését. A Mac útvonal továbbra is csak olvasó Terminal-parancsot használ.
 2. **Átvételi program** ([tool/](tool/), [web/receiver/](web/receiver/)): a vásárló számítógépén fut, USB-n olvassa ki az iPad adatait (`pymobiledevice3`). Ez a vásárló saját gépén végzett ellenőrzés, de nem kriptográfiai bizonyíték az adatok vagy az alkatrészek eredetére.
 
 Hiányzó USB-mező vagy nem elvégezhető webes teszt ismeretlen/nem tesztelt eredményt kap, nem hardverhibát. A seller gépéről származó adat nem kriptográfiai bizonyíték.

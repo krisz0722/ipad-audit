@@ -15,7 +15,7 @@ const SECTIONS = [
 test("a deployment check jogosultságot ellenőriz, nem készít meghívót és nem küld emailt", () => {
   const backend = makeBackend();
   const result = backend.context.checkDeployment();
-  assert.strictEqual(result.version, "2026.11.13.2");
+  assert.strictEqual(result.version, "2026.11.14.1");
   assert.strictEqual(result.invitationSheetAvailable, true);
   assert.strictEqual(result.recipientAvailable, true);
   assert.strictEqual(result.remainingMailQuota, 100);
@@ -73,6 +73,131 @@ test("audit: a USB- és webes eredmény a Sheetbe kerül email nélkül", () => 
   assert.strictEqual(backend.eventRows.length, 4);
   assert.strictEqual(backend.rows[1][3], "teszt kész");
   assert.strictEqual(backend.mails.length, 0);
+});
+
+test("audit: az akkumulátor-terhelésteszt mintái az Akku mérés munkalapra, az összefoglaló az összesített riportba kerül", () => {
+  const backend = makeBackend();
+  beginAudit(backend);
+  const batterySection = {
+    title: "Akkumulátor terhelésteszt",
+    rows: [
+      {
+        label: "Töltöttség változása",
+        value: "69% -> 67% (merülés: 2%, 0.40%/perc)",
+        status: "ok",
+        tag: "USB terhelésteszt",
+      },
+    ],
+  };
+  assert.strictEqual(
+    backend.call({
+      action: "audit_battery",
+      code: "123456789",
+      sid: AUDIT_SID,
+      samples: [
+        {
+          sec: 0,
+          level: 69,
+          voltageMv: 3973,
+          tempC: 37.2,
+          cycles: 90,
+          charging: true,
+          currentMa: -332,
+        },
+      ],
+      section: batterySection,
+    }).ok,
+    false,
+  );
+  assert.strictEqual(
+    backend.call({
+      action: "audit_event",
+      code: "123456789",
+      sid: AUDIT_SID,
+      seq: 1,
+      step: "usb",
+      status: "ok",
+      sections: SECTIONS,
+    }).ok,
+    true,
+  );
+  const firstBatch = backend.call({
+    action: "audit_battery",
+    code: "123456789",
+    sid: AUDIT_SID,
+    samples: [
+      {
+        sec: 0,
+        level: 69,
+        voltageMv: 3973,
+        tempC: 37.2,
+        cycles: 90,
+        charging: true,
+        currentMa: -332,
+      },
+      {
+        sec: 1,
+        level: 69,
+        voltageMv: 3984,
+        tempC: 37.3,
+        cycles: 90,
+        charging: true,
+        currentMa: -178,
+      },
+    ],
+    section: batterySection,
+  });
+  assert.strictEqual(firstBatch.ok, true);
+  assert.strictEqual(firstBatch.saved, 2);
+  const secondBatch = backend.call({
+    action: "audit_battery",
+    code: "123456789",
+    sid: AUDIT_SID,
+    samples: [
+      {
+        sec: 1,
+        level: 69,
+        voltageMv: 3984,
+        tempC: 37.3,
+        cycles: 90,
+        charging: true,
+        currentMa: -178,
+      },
+      {
+        sec: 2,
+        level: 67,
+        voltageMv: 3988,
+        tempC: 37.9,
+        cycles: 90,
+        charging: true,
+        currentMa: -137,
+      },
+    ],
+    section: batterySection,
+  });
+  assert.strictEqual(secondBatch.ok, true);
+  assert.strictEqual(secondBatch.saved, 1);
+  assert.strictEqual(backend.batteryRows.length, 4);
+  assert.strictEqual(
+    backend.call({
+      action: "audit_battery",
+      code: "123456789",
+      sid: AUDIT_SID,
+      samples: [{ sec: 3, level: 150 }],
+      section: batterySection,
+    }).ok,
+    false,
+  );
+  const status = backend.call({
+    action: "audit_status",
+    code: "123456789",
+    sid: AUDIT_SID,
+  });
+  assert.strictEqual(status.seq, 1);
+  assert.deepStrictEqual(
+    status.sections.map((section) => section.title),
+    ["Eszköz", "Akkumulátor terhelésteszt"],
+  );
 });
 
 test("audit: másik session nem olvashat, és a hiányzó lépés nem menthető", () => {

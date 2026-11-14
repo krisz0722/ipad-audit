@@ -13,13 +13,14 @@ AUDIT_SID = "0123456789ABCDEF0123456789ABCDEF"
 
 @pytest.fixture(autouse=True)
 def mock_audit_backend(monkeypatch):
-    from ipad_audit import audit
+    from ipad_audit import audit, battery_test
     from ipad_audit.backend import Backend
 
     calls = []
     monkeypatch.setattr(reader.secrets, "token_hex", lambda length: AUDIT_SID.lower())
     monkeypatch.setattr(Backend, "audit_begin", lambda self, *args, **options: calls.append(("begin", args, options)) or {"ok": True})
     monkeypatch.setattr(Backend, "audit_event", lambda self, *args, **options: calls.append(("event", args, options)) or {"ok": True})
+    monkeypatch.setattr(battery_test, "run_interactive", lambda *args, **options: None)
     monkeypatch.setattr(audit, "watch", lambda *args, **options: calls.append(("watch", args, options)) or "completed")
     return calls
 

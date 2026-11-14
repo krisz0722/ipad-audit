@@ -75,3 +75,6 @@ class Backend:
 
     def audit_email(self, code, sid, email):
         return self._audit("audit_email", code, sid, email=email)
+
+    def audit_battery(self, code, sid, samples, section):
+        return self._audit("audit_battery", code, sid, samples=samples, section=section)
