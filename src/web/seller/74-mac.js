@@ -1,48 +1,21 @@
 /* ---- akku, Mac ---- */
 
 SCREENS.mac_run = function () {
-  var parts = [
-    ["<code>sw_vers -productVersion</code>", "a macOS verziószáma"],
-    [
-      "<code>system_profiler -xml SPHardwareDataType</code> és <code>grep</code>",
-      "a Mac típusa, chipje, memóriája, sorozatszáma és az Aktiválási zár állapota. A gép nevét, az azonosítókat és a hálózati adatokat nem írja ki."
-    ],
-    [
-      "<code>system_profiler -xml SPPowerDataType</code> és <code>grep</code>",
-      "az akkumulátor ciklusszáma, állapota és maximális kapacitása"
-    ],
-    [
-      "<code>profiles status -type enrollment</code> és <code>grep</code>",
-      "csak két igen/nem válasz arról, van-e céges vagy iskolai felügyelet. A szervezet nevét és a szerver címét nem írja ki."
-    ],
-    ["<code>df -k</code> és <code>tail</code>", "a tárhely mérete"]
-  ];
-  var rows = "";
-  for (var i = 0; i < parts.length; i++)
-    rows += "<tr><td>" + parts[i][0] + "</td><td>" + parts[i][1] + "</td></tr>";
   show(
     top() +
       progress(2) +
       "<h1>A Mac adatai</h1>" +
-      '<p class="lead">A Mac az akkumulátor és a hardver adatait a Rendszerinformációban tárolja. Egy rövid parancs kiolvassa ezeket, a kimenetet pedig te másolod ide. Így pontosan látod, mi megy tovább.</p>' +
-      '<div class="card"><h3>Mit csinál a parancs?</h3><ul class="marks yes">' +
-      "<li>Csak olvas, semmit nem módosít és nem telepít.</li>" +
-      "<li>Nem csatlakozik az internetre.</li>" +
-      "<li>Nem kér jelszót. Ha bármi jelszót kér, állj meg, és ne add meg.</li>" +
-      "<li>Csak a felsorolt adatokat írja ki.</li>" +
-      "</ul></div>" +
+      '<p class="lead">A Mac hardver- és akkumulátoradatait egyetlen biztonságos, csak olvasó paranccsal olvassuk ki a Terminálból. Nem kér jelszót, nem módosít semmit, és nem csatlakozik az internetre.</p>' +
       '<ol class="steps">' +
-      "<li>Nyisd meg a <b>Terminált</b>: nyomd meg a <b>Cmd + Szóköz</b> billentyűt, írd be, hogy <b>Terminal</b>, majd nyomj Entert.</li>" +
-      "<li>Másold ki az alábbi parancsot, illeszd be a Terminálba, és nyomj <b>Entert</b>. Pár másodpercig dolgozik." +
+      "<li>Nyisd meg a <b>Terminált</b> (nyomd meg a <b>Cmd + Szóköz</b> billentyűt, írd be: <b>Terminal</b>, majd nyomj Entert).</li>" +
+      "<li>Másold ki és futtasd az alábbi parancsot a Terminálban:" +
       '<pre class="code" id="cmd">' +
       esc(MAC_COMMAND) +
       "</pre>" +
       '<button type="button" class="btn small" id="copy">Parancs másolása</button><span class="muted" id="copied"></span></li>' +
+      "<li>A futtatás után lépj tovább a kimenet beillesztéséhez.</li>" +
       "</ol>" +
-      '<details><summary>Mit jelentenek a parancs részei?</summary><div class="tablewrap"><table><thead><tr><th>Rész</th><th>Mit olvas</th></tr></thead><tbody>' +
-      rows +
-      "</tbody></table></div></details>" +
-      '<p><button type="button" class="link" id="to-manual">Inkább nem futtatok parancsot</button></p>' +
+      '<p><button type="button" class="link" id="to-manual">Inkább kézzel adom meg az adatokat</button></p>' +
       foot("m-next", "Lefuttattam, tovább")
   );
   on("copy", function () {

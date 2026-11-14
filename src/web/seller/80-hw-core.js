@@ -106,14 +106,14 @@ SCREENS.hw_intro = function () {
     top() +
       progress(4) +
       "<h1>Hardverteszt</h1>" +
-      '<p class="lead">Néhány rövid teszt, kb. 3 percig. Az oldal <b>maga méri</b>, mit érzékel az eszköz: hány mezőt érzett az érintőképernyő, mekkora mozgást mért az érzékelő, meghallotta-e a mikrofon a hangjelzést. Nem a te válaszod számít. Ami ezen a rendszeren nem mérhető, azt a riport külön jelzi.</p>' +
+      '<p class="lead">Gyors, kb. 2-3 perces ellenőrzés. Az oldal közvetlenül a beépített érzékelőket teszteli (érintés, mozgás, hang, kamera és kijelző). Nem kötelező, de segít igazolni az eszköz állapotát.</p>' +
       '<ul class="marks yes">' +
       items +
       "</ul>" +
       choice(
         "hw-go",
-        "Elkezdem",
-        "Kb. 3 perc. Ne vegyél fel hívást közben.",
+        "Elkezdem a hardvertesztet",
+        "Kb. 2-3 perc.",
         false
       ) +
       choice(
