@@ -28,6 +28,39 @@ function on(id, fn) {
   var node = $(id);
   if (node) node.addEventListener("click", fn);
 }
+function updateLiveVersion() {
+  var bar = document.querySelector ? document.querySelector(".version-bar") : null;
+  if (!bar) return;
+  var url = "version.json";
+  function applyCommit(data) {
+    if (!data) return;
+    var hash = data.commit || data.short_id;
+    var dateStr = data.date ? (data.date + (data.time ? " " + data.time : "")) : "";
+    if (!hash && !dateStr) return;
+    bar.innerHTML = 'Git: ' + esc(hash || '') + ' <span aria-hidden="true">|</span> Frissítve: <time datetime="' + esc(data.date || '') + '">' + esc(dateStr) + '</time>';
+  }
+  if (window.fetch) {
+    fetch(url)
+      .then(function (res) {
+        if (res && res.ok) return res.json();
+      })
+      .then(applyCommit)
+      .catch(function () {});
+  } else if (window.XMLHttpRequest) {
+    try {
+      var xhr = new XMLHttpRequest();
+      xhr.open("GET", url, true);
+      xhr.onreadystatechange = function () {
+        if (xhr.readyState === 4 && xhr.status === 200) {
+          try {
+            applyCommit(JSON.parse(xhr.responseText));
+          } catch (e) {}
+        }
+      };
+      xhr.send();
+    } catch (e) {}
+  }
+}
 function toInt(text, min, max) {
   var t = String(text).trim();
   if (!/^\d{1,5}$/.test(t)) return null;

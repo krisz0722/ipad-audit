@@ -20,4 +20,5 @@
   try { history.replaceState({ idx: state.idx }, ''); } catch (e) { /* nem baj */ }
   window.addEventListener('popstate', onPop);
   if (DEMO && DEMO_ID && jumpDemo(DEMO_ID)) { /* a mélylink a kért képernyőre vitt */ } else { render(); }
+  updateLiveVersion();
 })();

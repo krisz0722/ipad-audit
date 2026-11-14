@@ -19,6 +19,10 @@ pages:
   script:
     - mkdir -p public
     - cp -r web/* public/
+    - COMMIT_SHORT=$(echo "$CI_COMMIT_SHA" | cut -c1-8)
+    - COMMIT_DATE=$(date -u +"%Y.%m.%d.")
+    - COMMIT_TIME=$(date -u +"%H:%M UTC")
+    - 'printf "{\n  \"commit\": \"%s\",\n  \"date\": \"%s\",\n  \"time\": \"%s\"\n}\n" "$COMMIT_SHORT" "$COMMIT_DATE" "$COMMIT_TIME" > public/version.json'
   artifacts:
     paths:
       - public
