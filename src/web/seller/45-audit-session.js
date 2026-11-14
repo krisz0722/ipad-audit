@@ -98,6 +98,7 @@ function auditScreen(name) {
     hw_camera_rear: "rear",
     hw_camera_front: "front",
     hw_display: "display",
+    hw_buttons: "buttons",
     hw_keyboard: "keyboard",
     hw_pointer: "pointer",
     review: "review"

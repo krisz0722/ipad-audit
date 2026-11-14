@@ -19,7 +19,8 @@
         audio: { status: 'ok', detail: 'bal csatorna 4 / 4, jobb csatorna 4 / 4 hang hallatszott' },
         camera_rear: { status: 'ok', detail: 'élő kép érkezik' },
         camera_front: { status: 'ok', detail: 'élő kép érkezik' },
-        display: { status: 'ok', detail: 'az eladó nem látott hibát' }
+        display: { status: 'ok', detail: 'az eladó nem látott hibát' },
+        buttons: { status: 'ok', detail: 'bekapcsoló/Home és hangerőgombok működnek' }
       },
       sources: {
         model: 'USB-ből', chip: '', memory: '', storage: 'USB-ből', os: 'USB-ből', serial: 'USB-ből',

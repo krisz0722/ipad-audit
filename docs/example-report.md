@@ -47,6 +47,7 @@ A fájl a `web/example.js` adataiból készül a `scripts/make-example.js` szkri
 | Hátlapi kamera | ✅ élő kép érkezik | mért |
 | Előlapi kamera | ✅ élő kép érkezik | mért |
 | Kijelző színei | ✅ az eladó nem látott hibát | bemondás |
+| Fizikai gombok | ✅ bekapcsoló/Home és hangerőgombok működnek | vegyes |
 
 ## Az adatok jellege
 

@@ -24,6 +24,7 @@ var AUDIT_STEPS = [
   "rear",
   "front",
   "display",
+  "buttons",
   "keyboard",
   "pointer",
   "review",

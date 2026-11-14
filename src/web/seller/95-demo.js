@@ -191,7 +191,8 @@ function demoHw(kind, mode) {
       "a hangszóró és a mikrofon rendben, a mikrofon meghallotta a hangjelzéseket",
     camera_rear: "élő kép érkezik",
     camera_front: "élő kép érkezik",
-    display: "az eladó nem látott hibát"
+    display: "az eladó nem látott hibát",
+    buttons: "bekapcsoló/Home és hangerőgombok működnek"
   };
   var bad = {
     keyboard: [demoKeyboard(false).status, demoKeyboard(false).detail],
@@ -201,12 +202,14 @@ function demoHw(kind, mode) {
     audio: ["bad", "a mikrofon nem hallotta a hangszórót"],
     camera_rear: ["bad", "csak fekete vagy egyszínű kép érkezett"],
     camera_front: ["ok", good.camera_front],
-    display: ["bad", "az eladó hibát látott a kijelzőn"]
+    display: ["bad", "az eladó hibát látott a kijelzőn"],
+    buttons: ["bad", "a hangerőgombok nem működnek vagy beragadtak"]
   };
   var legacy = {
     touch: ["ok", good.touch],
     motion: ["ok", good.motion],
-    display: ["ok", good.display]
+    display: ["ok", good.display],
+    buttons: ["ok", good.buttons]
   };
   for (i = 0; i < list.length; i++) {
     name = list[i];
@@ -392,6 +395,10 @@ demo(
 demo(G9, "ios9-hw-display", "Kijelző színei", {
   env: "ipad9",
   screen: "hw_display"
+});
+demo(G9, "ios9-hw-buttons", "Fizikai gombok", {
+  env: "ipad9",
+  screen: "hw_buttons"
 });
 demo(G9, "ios9-remaining-nolog", "Mi maradt, akku adat nélkül", {
   env: "ipad9",

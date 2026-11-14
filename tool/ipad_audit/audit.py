@@ -8,7 +8,7 @@ STEP_NAMES = {
     "usb": "USB-adatok mentése", "start": "Webes teszt indítása",
     "details": "Eszközadatok", "touch": "Touch teszt", "motion": "Mozgásteszt",
     "audio": "Hangteszt", "rear": "Hátlapi kamera", "front": "Előlapi kamera",
-    "display": "Kijelző", "keyboard": "Billentyűzet", "pointer": "Egér és trackpad",
+    "display": "Kijelző", "buttons": "Fizikai gombok", "keyboard": "Billentyűzet", "pointer": "Egér és trackpad",
     "review": "Riport előnézete", "skip": "Teszt kihagyása", "error": "Webes hiba",
     "finish": "Összesített riport mentése", "cancel": "Teszt megszakítása",
 }

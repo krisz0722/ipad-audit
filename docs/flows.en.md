@@ -275,6 +275,7 @@ In demo mode nothing has to be run: the USB result uses a made-up sample, the Ma
 | `#DEMO-ios9-hw-camera-rear`  | Hátlapi kamera (iOS 9-en nem ellenőrizhető)       |
 | `#DEMO-ios9-hw-camera-front` | Előlapi kamera (iOS 9-en nem ellenőrizhető)       |
 | `#DEMO-ios9-hw-display`      | Kijelző színei                                    |
+| `#DEMO-ios9-hw-buttons`      | Fizikai gombok tesztje                            |
 | `#DEMO-ios9-remaining-nolog` | Mi maradt, akku adat nélkül                       |
 | `#DEMO-ios9-remaining-log`   | Mi maradt, napló beolvasva                        |
 | `#DEMO-ios9-usb-about`       | Mit csinál az USB-s program                       |

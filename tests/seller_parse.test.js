@@ -490,11 +490,27 @@ test("hardverteszt a riportban: mért és bemondás jelölés, hiányzó teszt, 
   assert.strictEqual(byLabel("Hangszóró és mikrofon").status, "nodata");
   assert.strictEqual(byLabel("Kijelző színei").tag, "bemondás");
   assert.strictEqual(byLabel("Hátlapi kamera").value, "nem tesztelt");
+  assert.strictEqual(byLabel("Fizikai gombok").value, "nem tesztelt");
   const summary = section(sections, "Összegzés a vevőnek").rows.find(
     (r) => r.label === "Hardver (mért tesztek)",
   );
   assert.strictEqual(summary.status, "bad");
   assert.match(summary.value, /1 rendben, 1 hibás, 3 nem tesztelt/);
+});
+
+test("hardverteszt: a fizikai gombok állapota és forrása vegyes", () => {
+  const hw = {
+    buttons: {
+      status: "ok",
+      detail: "bekapcsoló/Home és hangerőgombok működnek",
+    },
+  };
+  const sections = P.buildSections(sampleData({ kind: "ios", hw }));
+  const rows = section(sections, "Hardverteszt").rows;
+  const btnRow = rows.find((r) => r.label === "Fizikai gombok");
+  assert.strictEqual(btnRow.status, "ok");
+  assert.strictEqual(btnRow.tag, "vegyes");
+  assert.strictEqual(btnRow.value, "bekapcsoló/Home és hangerőgombok működnek");
 });
 
 test("hardverteszt: Macnél a billentyűzet, az egér, a hang, az előlapi kamera és a kijelző szerepel", () => {

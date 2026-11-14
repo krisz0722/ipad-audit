@@ -165,7 +165,7 @@ def extract_code(text):
 
 
 def main(argv=None):
-    from ipad_audit import audit, battery_test, config, reader_web
+    from ipad_audit import audit, battery_test, button_test, config, reader_web
     from ipad_audit.backend import Backend, BackendError
 
     parser = argparse.ArgumentParser()
@@ -236,6 +236,7 @@ def main(argv=None):
         print("A USB-adatok mentése nem igazolt: " + str(error), file=sys.stderr)
         pause()
         return 1
+    button_test.run_interactive(backend, code, sid, notify, ask=input)
     battery_test.run_interactive(backend, code, sid, notify, ask=input)
     if copy_email:
         try:

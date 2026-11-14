@@ -686,6 +686,7 @@
     camera_rear: "Hátlapi kamera",
     camera_front: "Előlapi kamera",
     display: "Kijelző színei",
+    buttons: "Fizikai gombok",
     keyboard: "Billentyűzet",
     pointer: "Egér és trackpad"
   };
@@ -695,7 +696,15 @@
     mac: ["keyboard", "pointer", "audio", "camera_front"]
   };
   var HW_SHOWN = {
-    ios: ["touch", "motion", "audio", "camera_rear", "camera_front", "display"],
+    ios: [
+      "touch",
+      "motion",
+      "audio",
+      "camera_rear",
+      "camera_front",
+      "display",
+      "buttons"
+    ],
     mac: ["keyboard", "pointer", "audio", "camera_front", "display"]
   };
 
@@ -975,7 +984,12 @@
     for (var k = 0; k < shown.length; k++) {
       var r = d.hw && d.hw[shown[k]],
         label = HW_LABELS[shown[k]],
-        tag = shown[k] === "display" ? "bemondás" : "mért";
+        tag =
+          shown[k] === "display"
+            ? "bemondás"
+            : shown[k] === "buttons"
+              ? "vegyes"
+              : "mért";
       if (r && r.status === "ok")
         hardware.push(row(label, r.detail || "rendben", "ok", tag));
       else if (r && r.status === "bad")

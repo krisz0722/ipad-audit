@@ -1,7 +1,15 @@
 /* ---- hardverteszt: az oldal maga méri, mit érzékel az eszköz ---- */
 
 var HW_FLOW = {
-  ios: ["touch", "motion", "audio", "camera_rear", "camera_front", "display"],
+  ios: [
+    "touch",
+    "motion",
+    "audio",
+    "camera_rear",
+    "camera_front",
+    "display",
+    "buttons"
+  ],
   mac: ["keyboard", "pointer", "audio", "camera_front", "display"]
 };
 var HW_TITLES = {
@@ -11,6 +19,7 @@ var HW_TITLES = {
   camera_rear: "Hátlapi kamera",
   camera_front: "Előlapi kamera",
   display: "Kijelző színei",
+  buttons: "Fizikai gombok",
   keyboard: "Billentyűzet",
   pointer: "Egér és trackpad"
 };
@@ -106,7 +115,7 @@ SCREENS.hw_intro = function () {
     top() +
       progress(4) +
       "<h1>Hardverteszt</h1>" +
-      '<p class="lead">Gyors, kb. 2-3 perces ellenőrzés. Az oldal közvetlenül a beépített érzékelőket teszteli (érintés, mozgás, hang, kamera és kijelző). Nem kötelező, de segít igazolni az eszköz állapotát.</p>' +
+      '<p class="lead">Gyors, kb. 2-3 perces ellenőrzés. Az oldal közvetlenül a beépített érzékelőket, a kamerákat, a kijelzőt és a fizikai gombokat teszteli. Nem kötelező, de segít igazolni az eszköz állapotát.</p>' +
       '<ul class="marks yes">' +
       items +
       "</ul>" +
