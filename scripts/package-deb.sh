@@ -4,7 +4,12 @@ set -euo pipefail
 # Használat: scripts/package-deb.sh <binary_path> <output_deb_path> [version]
 BIN_PATH="${1:-dist/ipad-audit-reader}"
 OUTPUT_DEB="${2:-out/ipad-audit-reader-linux-x86_64.deb}"
-VERSION="${3:-1.0.0}"
+RAW_VERSION="${3:-1.0.0}"
+VERSION="${RAW_VERSION#v}"
+case "$VERSION" in
+    [0-9]*) ;;
+    *) VERSION="1.0.0" ;;
+esac
 
 if [ ! -f "$BIN_PATH" ]; then
     echo "Hiba: A binaris nem talalhato: $BIN_PATH" >&2

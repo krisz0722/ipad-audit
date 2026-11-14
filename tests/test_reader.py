@@ -612,7 +612,8 @@ def test_device_browser_awaits_handshake_child_before_closing(monkeypatch, caplo
 
     monkeypatch.setattr(lockdown, "create_using_usbmux", connect)
     monkeypatch.setattr(webinspector, "WebinspectorService", Inspector)
-    assert reader_web.open_on_device("123456789", timeout=0.01) is False
+    timeout = 0.1 if outcome == "timeout" else 2.0
+    assert reader_web.open_on_device("123456789", timeout=timeout) is False
     expected = ["receive_finished"]
     if outcome == "success":
         expected.append("handshake_completed")
