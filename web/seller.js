@@ -3215,7 +3215,11 @@ SCREENS.review = function () {
     html +=
       '<div class="note warn">Nem adtál meg akkumulátor adatot. A vásárló ezt hiányként fogja látni.</div>';
   }
-  html += sectionsHtml(sections);
+  html +=
+    '<details class="example"><summary>A teljes teszt megtekintése</summary>' +
+    '<p class="muted">Kattints a részletes teszteredmények megnyitásához vagy becsukásához.</p>' +
+    sectionsHtml(sections) +
+    "</details>";
   html +=
     (DEMO
       ? '<div class="note">Próbaüzemben a befejezés nem küld el semmit.</div>'
