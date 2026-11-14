@@ -2,7 +2,18 @@
 
   var detected = DEVICE;
   var restored = DEMO_ID ? false : restore();
-  if (!restored) { state.path = ['welcome']; state.idx = 0; state.step = 'welcome'; }
+  if (!restored) {
+    if (!DEMO && CODE && !localUsbBlock && (!ON_COMPUTER || LINK_SID)) {
+      state.kind = 'ios';
+      state.path = ['web_intro'];
+      state.idx = 0;
+      state.step = 'web_intro';
+    } else {
+      state.path = ['welcome'];
+      state.idx = 0;
+      state.step = 'welcome';
+    }
+  }
   if (detected) state.detectedOs = detected.version;
   if (!state.osFamily) state.osFamily = detected ? familyOf(detected.major) : 'latest';
   if (detected && !state.vals.os) state.vals.os = detected.version;

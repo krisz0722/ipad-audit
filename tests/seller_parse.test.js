@@ -432,10 +432,15 @@ test("motionTracker: kell mozgás és forgás is, mért érték alapján", () =>
   still.feed({ x: 0.1, y: 0.2, z: -9.8 }, { alpha: 1, beta: 1, gamma: 1 });
   assert.strictEqual(still.state().complete, false);
   assert.strictEqual(still.state().events, 1);
+  const oneWay = P.motionTracker();
+  oneWay.feed({ x: -6, y: -5, z: -9 }, { alpha: 50, beta: 50, gamma: 50 });
+  oneWay.feed({ x: 6, y: 5, z: 1 }, { alpha: 50, beta: 50, gamma: 50 });
+  assert.strictEqual(oneWay.state().complete, false);
   const moved = P.motionTracker();
-  moved.feed({ x: -6, y: -5, z: 0 }, { alpha: 10, beta: 0, gamma: 0 });
-  moved.feed({ x: 6, y: 5, z: 0 }, { alpha: 0, beta: 55, gamma: 0 });
+  moved.feed({ x: -6, y: -5, z: -9 }, { alpha: -50, beta: -50, gamma: -50 });
+  moved.feed({ x: 6, y: 5, z: 1 }, { alpha: 50, beta: 55, gamma: 50 });
   assert.strictEqual(moved.state().complete, true);
+  assert.strictEqual(moved.state().doneCount, 6);
   const noSensor = P.motionTracker();
   assert.strictEqual(noSensor.state().events, 0);
 });

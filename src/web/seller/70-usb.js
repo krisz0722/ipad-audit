@@ -38,22 +38,43 @@ SCREENS.usb_get = function () {
       "</pre>" +
       '<button type="button" class="btn small" id="copy-mac">Parancs másolása</button><span class="muted" id="copied-mac"></span></div>';
   }
+  var why =
+    "<h2>Miért kell ez a program a számítógépre?</h2>" +
+    "<p>Az iPad és az iPhone böngészője biztonsági okokból nem fér hozzá az akkumulátor valódi töltési ciklusaihoz, a gyári és jelenlegi kapacitáshoz, a sorozatszámhoz és az Aktiválási zár állapotához. Ezeket az adatokat kizárólag USB-kábelen, az Apple diagnosztikai protokollján keresztül lehet pontosan kiolvasni.</p>" +
+    '<div class="grid2">' +
+    '<div class="card"><h3>Mit olvas ki az USB-n?</h3><ul class="marks yes">' +
+    "<li>modell, hardverplatform, rendszerverzió, tárhely</li>" +
+    "<li>akkumulátor töltési ciklusszáma és tényleges kapacitása (mAh és %)</li>" +
+    "<li>Aktiválási zár (Find My) állapota, ha kiolvasható</li>" +
+    "<li>sorozatszám (az Apple lefedettség ellenőrzéséhez)</li>" +
+    "<li>opcionális 5 perces akkumulátor-terhelésteszt közbeni hardverjelek</li>" +
+    "</ul></div>" +
+    '<div class="card"><h3>Mit nem olvas ki soha?</h3><ul class="marks no">' +
+    "<li>fotók, üzenetek, névjegyek, fájlok, alkalmazások</li>" +
+    "<li>Apple-fiók, jelszavak, emailcímek, telefonszám</li>" +
+    "<li>helyadat, Wi-Fi hálózatok, böngészési előzmények</li>" +
+    "<li>eszköznév, IMEI, UDID, MAC-cím</li>" +
+    "</ul></div>" +
+    "</div>";
   var trust =
-    '<div class="note"><b>Miért megbízható ez a program?</b><ul class="marks yes">' +
-    "<li><b>Nyílt forráskód.</b> A program teljes kódja nyilvános, bárki elolvashatja: " +
-    '<a href="https://github.com/krisz0722/ipad-audit/blob/main/tool/ipad_audit/reader.py" target="_blank" rel="noopener">a GitHubon</a> és ' +
-    '<a href="https://gitlab.com/krisz0722/ipad-audit/-/blob/main/tool/ipad_audit/reader.py" target="_blank" rel="noopener">a GitLabon</a>.</li>' +
-    "<li><b>Csak olvas.</b> Semmit nem módosít az eszközön.</li>" +
-    "<li><b>Előzetes beleegyezés.</b> A program a kiolvasás előtt kéri a meghívókódot és a beleegyezésedet. Az USB-adatokat a vásárló private Sheetjébe mentjük, majd az iPaden vagy iPhone-on folytatod a tesztet. Az elején egyszer kérhetsz összesített emailriportot saját magadnak; a vásárlónak nem küldünk emailt.</li>" +
-    '<li><b>Ellenőrizhető letöltés.</b> A fájlt a GitHub építi a nyilvános kódból (<a href="https://github.com/krisz0722/ipad-audit/actions" target="_blank" rel="noopener">a build naplója</a>), ' +
-    'a <a href="https://github.com/krisz0722/ipad-audit/releases/latest" target="_blank" rel="noopener">kiadás oldalán</a> minden fájl mellett ott az ellenőrző összeg (.sha256).</li>' +
+    '<div class="note"><b>Miért megbízható, és mit kapsz belőle te?</b><ul class="marks yes">' +
+    "<li><b>Előbb te látod az eredményt.</b> A program a saját képernyődön is azonnal kiírja az akkumulátor valódi kopását és az Aktiválási zár állapotát, így nem az átvételnél ér meglepetés.</li>" +
+    "<li><b>Csak olvas, nem módosít.</b> Semmit nem telepít az iPadre vagy iPhone-ra, és semmit nem változtat rajta.</li>" +
+    "<li><b>Előzetes beleegyezés és saját riport.</b> A kiolvasás előtt kéri a meghívókódot és a jóváhagyásodat. Ha kéred, a folyamat végén saját magadnak is küldhetsz egy összesített emailriportot.</li>" +
+    "<li><b>Nyílt forráskód és ellenőrizhető letöltés.</b> A program teljes kódja nyilvános (" +
+    '<a href="https://github.com/krisz0722/ipad-audit/blob/main/tool/ipad_audit/reader.py" target="_blank" rel="noopener">GitHub</a>, ' +
+    '<a href="https://gitlab.com/krisz0722/ipad-audit/-/blob/main/tool/ipad_audit/reader.py" target="_blank" rel="noopener">GitLab</a>), ' +
+    'a fájlt a GitHub építi automatikusan (<a href="https://github.com/krisz0722/ipad-audit/actions" target="_blank" rel="noopener">build napló</a>), ' +
+    'a <a href="https://github.com/krisz0722/ipad-audit/releases/latest" target="_blank" rel="noopener">kiadás oldalán</a> pedig minden fájl mellett ott az ellenőrző összeg (.sha256).</li>' +
     "</ul></div>";
   show(
     top() +
       progress(2) +
       "<h1>A kiolvasó program letöltése</h1>" +
+      '<p class="lead">Az ellenőrzés két részből áll: először itt a számítógépen USB-kábellel kiolvassuk az akkumulátor és a hardver alapadatait, majd a program átirányít az iPadre vagy iPhone-ra a rövid böngészős tesztekhez.</p>' +
+      why +
       trust +
-      '<p class="lead">Töltsd le a számítógépedre a megfelelő fájlt:</p>' +
+      "<h2>1. lépés: Töltsd le a számítógépedre a megfelelő fájlt</h2>" +
       buttons +
       notes +
       foot("u-next", "Letöltöttem, tovább")
@@ -85,15 +106,18 @@ SCREENS.usb_run = function () {
     top() +
       progress(2) +
       "<h1>Csatlakoztatás és futtatás</h1>" +
+      '<p class="lead">Most futtasd le a kiolvasót a számítógépen. Ha végzett, a folyamat automatikusan az iPaden vagy iPhone-on folytatódik.</p>' +
       '<ol class="steps">' +
-      "<li>Kösd az eszközt USB-kábellel a számítógéphez, oldd fel, és ha megkérdezi, koppints a <b>Megbízom</b> gombra.</li>" +
-      "<li>" +
+      "<li><b>Csatlakoztatás:</b> Kösd az iPadet vagy iPhone-t USB-kábellel a számítógéphez, oldd fel a képernyőzárat, és ha az eszköz megkérdezi, koppints a <b>Megbízom</b> gombra.</li>" +
+      "<li><b>Indítás:</b> " +
       runStep +
       "</li>" +
-      "<li>A programban add meg a meghívókódot, és hagyd jóvá a tesztadatok Sheetbe mentését. Ha a végén összesített emailriportot kérsz, itt egyszer megadhatod az emailcímedet.</li>" +
-      "<li>A kiolvasás mentése után a program megpróbálja az audit oldalát az iPaden vagy iPhone-on megnyitni. Ehhez engedélyezett Web Inspector és nyitott audit oldal vagy üres Safari tab szükséges. Ha ez nem sikerül, a programban kiemelten megjelenő teljes folytatólinket nyisd meg az eladandó eszköz Safarijában.</li>" +
+      "<li><b>Kiolvasás és opcionális akkuteszt:</b> A programban add meg a meghívókódot (" +
+      esc(CODE || "a 9 jegyű kódot") +
+      "), és hagyd jóvá a mentést. Ha a végén saját magadnak is kérsz összesített emailriportot, itt adhatod meg az emailcímedet. A gyors USB-kiolvasás után a program felajánlja az opcionális 5 perces akkumulátor-terheléstesztet is.</li>" +
+      "<li><b>Átlépés az iPadre vagy iPhone-ra:</b> A számítógépes mérés végén a program megpróbálja automatikusan megnyitni a Safarit az eladandó eszközön, és kiírja a folytatólinket is. Nyisd meg ezt a linket az iPaden vagy iPhone-on, és ott végezd el a rövid webes hardverteszteket.</li>" +
       "</ol>" +
-      '<div class="note">A webes teszteket az eladandó iPaden vagy iPhone-on végezd, ne a számítógépen. A readert hagyd nyitva a teljes webes teszt és a kért email visszaigazolásának végéig: a programban látod a mentett lépéseket.</div>' +
+      '<div class="note"><b>Fontos:</b> A számítógépen itt végeztél, ezen a böngészőlapon már nem kell tovább lépned. A futó kiolvasó programot (terminálablakot) viszont hagyd nyitva addig, amíg az iPaden be nem fejezed a webes teszteket: a program követi a lépéseket, és a végén ez küldi el a kért összesített emailt.</div>' +
       foot()
   );
 };
@@ -120,26 +144,22 @@ SCREENS.web_intro = function () {
   show(
     top() +
       progress(2) +
-      "<h1>USB-kiolvasás, majd webes tesztek</h1>" +
-      '<ol class="steps"><li>A reader a beleegyezésed után a USB-adatokat a vásárló private Sheetjébe menti.</li><li>Ezen az iPaden vagy iPhone-on elvégzed a webes teszteket; az eredményeket lépésenként mentjük.</li><li>A végén összesített riport készül. Ha a reader elején kérted, azt egyszer emailben is megkapod. A readert hagyd nyitva.</li></ol>' +
-      '<label class="check"><input type="checkbox" id="audit-consent"> Beleegyezem a webes teszt lépéseinek, rész-eredményeinek és hibajelzéseinek folyamatos mentésébe a vásárló private Sheetjében.</label><div id="msg"></div>' +
-      choice(
-        "web-download",
-        "A kiolvasó letöltése",
-        "A számítógépen futtatod, USB-kábellel.",
-        false
-      ) +
-      choice(
-        "web-start",
-        "A USB-kiolvasó már lefutott, folytatom",
-        "A webes tesztek következnek ezen az eszközön.",
-        false
-      ) +
-      foot()
+      "<h1>Webes tesztek indítása</h1>" +
+      '<p class="lead">A számítógépes USB-mérés után most itt, magán az iPaden vagy iPhone-on ellenőrizzük azokat a részeket, amelyeket csak kézben tartva lehet kipróbálni.</p>' +
+      "<h2>Mi következik ezen az eszközön, és miért?</h2>" +
+      '<ul class="marks yes">' +
+      "<li><b>Apple-fiók kijelentkezési állapota:</b> visszajelzed, hogy kijelentkeztél-e már az iCloudból.</li>" +
+      "<li><b>Érintőképernyő és kétujjas érzékelés:</b> végighúzod az ujjad a képernyőn, hogy látszódjon, nincs-e érzéketlen sáv.</li>" +
+      "<li><b>Mozgásérzékelő és giroszkóp:</b> megdöntöd és megforgatod az eszközt, hogy az oldal lemérje a szenzorok működését.</li>" +
+      "<li><b>Hangszóró és mikrofon:</b> rövid hangjelzéseket játszunk le, és a mikrofon ellenőrzi, tisztán hallatszanak-e.</li>" +
+      "<li><b>Előlapi és hátlapi kamera, kijelző:</b> ellenőrzi, hogy a kamerák valódi képet adnak-e (fotó nem készül és nem mentődik el), majd teljes képernyős színekkel megnézheted a kijelzőt.</li>" +
+      "</ul>" +
+      '<div class="note">A rész-eredményeket lépésenként mentjük a vásárló private Sheetjébe, a végén pedig a korábbi USB-adatokkal együtt látod a teljes összesített riportot. A számítógépen futó readert hagyd nyitva a teszt befejezéséig.</div>' +
+      '<label class="check"><input type="checkbox" id="audit-consent"' +
+      (state.auditConsent ? " checked" : "") +
+      '> Beleegyezem a webes teszt lépéseinek, rész-eredményeinek és hibajelzéseinek folyamatos mentésébe a vásárló private Sheetjében.</label><div id="msg"></div>' +
+      foot("web-start", "Webes tesztek indítása")
   );
-  on("web-download", function () {
-    go("usb_switch");
-  });
   on("web-start", function () {
     auditOpen("details", false);
   });

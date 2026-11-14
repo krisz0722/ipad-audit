@@ -157,8 +157,9 @@ test(
       });
       await page.goto(address);
       assert.equal(await page.locator("#code").count(), 0);
-      await page.locator("#start").click();
-      await page.locator("#k-ios").click();
+      assert.equal(await page.locator("#start").count(), 0);
+      assert.equal(await page.locator("#k-ios").count(), 0);
+      assert.equal(await page.locator("#web-download").count(), 0);
       await page.locator("#web-start").click();
       assert.match(await page.locator("#msg").innerText(), /beleegyezésed/);
       await page.locator("#audit-consent").check();

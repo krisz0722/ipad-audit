@@ -44,6 +44,10 @@ function begin() {
   }
   DEMO = false;
   CODE = text;
+  if ((!ON_COMPUTER || LINK_SID) && !localUsbBlock) {
+    pickKind("ios");
+    return;
+  }
   go("kind");
 }
 

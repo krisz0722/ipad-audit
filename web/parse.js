@@ -270,36 +270,71 @@
 
   // Mozgásérzékelő: az eszközt tényleg el kell mozgatni és forgatni, a mért érték számít.
   function motionTracker() {
-    var min = { x: 99, y: 99 },
-      max = { x: -99, y: -99 },
+    var min = { x: 99, y: 99, z: 99 },
+      max = { x: -99, y: -99, z: -99 },
+      rotMin = { alpha: 999, beta: 999, gamma: 999 },
+      rotMax = { alpha: -999, beta: -999, gamma: -999 },
       rot = 0,
       events = 0;
     return {
       feed: function (acc, rate) {
         events++;
-        if (acc && typeof acc.x === "number" && typeof acc.y === "number") {
-          min.x = Math.min(min.x, acc.x);
-          max.x = Math.max(max.x, acc.x);
-          min.y = Math.min(min.y, acc.y);
-          max.y = Math.max(max.y, acc.y);
+        if (acc) {
+          if (typeof acc.x === "number") {
+            min.x = Math.min(min.x, acc.x);
+            max.x = Math.max(max.x, acc.x);
+          }
+          if (typeof acc.y === "number") {
+            min.y = Math.min(min.y, acc.y);
+            max.y = Math.max(max.y, acc.y);
+          }
+          if (typeof acc.z === "number") {
+            min.z = Math.min(min.z, acc.z);
+            max.z = Math.max(max.z, acc.z);
+          }
         }
-        if (rate)
-          rot = Math.max(
-            rot,
-            Math.abs(rate.alpha || 0),
-            Math.abs(rate.beta || 0),
-            Math.abs(rate.gamma || 0)
-          );
+        if (rate) {
+          var a = typeof rate.alpha === "number" ? rate.alpha : 0,
+            b = typeof rate.beta === "number" ? rate.beta : 0,
+            g = typeof rate.gamma === "number" ? rate.gamma : 0;
+          rotMin.alpha = Math.min(rotMin.alpha, a);
+          rotMax.alpha = Math.max(rotMax.alpha, a);
+          rotMin.beta = Math.min(rotMin.beta, b);
+          rotMax.beta = Math.max(rotMax.beta, b);
+          rotMin.gamma = Math.min(rotMin.gamma, g);
+          rotMax.gamma = Math.max(rotMax.gamma, g);
+          rot = Math.max(rot, Math.abs(a), Math.abs(b), Math.abs(g));
+        }
       },
       state: function () {
-        var rx = max.x - min.x,
-          ry = max.y - min.y;
+        var rx = max.x > min.x ? max.x - min.x : 0,
+          ry = max.y > min.y ? max.y - min.y : 0,
+          rz = max.z > min.z ? max.z - min.z : 0;
+        var checks = {
+          tiltX: min.x <= -4 && max.x >= 4 && rx >= 10,
+          tiltY: min.y <= -4 && max.y >= 4 && ry >= 10,
+          tiltZ: rz >= 8,
+          gyroBeta: rotMin.beta <= -35 && rotMax.beta >= 35,
+          gyroGamma: rotMin.gamma <= -35 && rotMax.gamma >= 35,
+          gyroAlpha: rotMin.alpha <= -35 && rotMax.alpha >= 35
+        };
+        var doneCount =
+          (checks.tiltX ? 1 : 0) +
+          (checks.tiltY ? 1 : 0) +
+          (checks.tiltZ ? 1 : 0) +
+          (checks.gyroBeta ? 1 : 0) +
+          (checks.gyroGamma ? 1 : 0) +
+          (checks.gyroAlpha ? 1 : 0);
         return {
           events: events,
           rangeX: rx,
           rangeY: ry,
+          rangeZ: rz,
           rotation: rot,
-          complete: rx > 8 && ry > 8 && rot > 40
+          checks: checks,
+          doneCount: doneCount,
+          totalChecks: 6,
+          complete: doneCount === 6
         };
       }
     };
