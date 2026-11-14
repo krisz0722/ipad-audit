@@ -2,7 +2,7 @@
 
 **Magyar** | [English](README.en.md)
 
-Használt iPad, iPhone és Mac vásárlásához készült ellenőrző eszköz. Az iPad/iPhone eladó először lefuttatja a USB-readert, majd az eladandó eszközön elvégzi a webes teszteket. Az eredményeket és a tesztlépéseket a vásárló private Sheetjébe mentjük; a végén egy összesített riport készül, amelyet az eladó – ha az elején kéri – egyszer emailben is megkap.
+Használt iPad, iPhone és Mac vásárlásához készült ellenőrző eszköz. Az iPad/iPhone eladó először lefuttatja a USB-readert, majd az eladandó eszközön elvégzi a webes teszteket. Az eredményeket és a tesztlépéseket a vásárló private Sheetjébe mentjük; a végén egy összesített riport készül, amelyet az eladó, ha az elején kéri, egyszer emailben is megkap.
 
 A kód nyilvános, hogy az eladó (és bárki) megnézhesse, pontosan mit olvas ki az oldal, és mit küld el.
 
@@ -46,7 +46,7 @@ Két mód van:
 
 Hiányzó USB-mező vagy nem elvégezhető webes teszt ismeretlen/nem tesztelt eredményt kap, nem hardverhibát. A seller gépéről származó adat nem kriptográfiai bizonyíték.
 
-Adatút: USB-reader és az eladandó eszköz böngészője -> Google Apps Script (`Meghívók` és `Tesztlépések` munkalapok); a végén összesített riport és – ha az eladó az induláskor kérte – egyetlen eladói email. Bizonytalan emailküldést a backend nem ismétel meg automatikusan.
+Adatút: USB-reader és az eladandó eszköz böngészője -> Google Apps Script (`Meghívók` és `Tesztlépések` munkalapok); a végén összesített riport és (ha az eladó az induláskor kérte) egyetlen eladói email. Bizonytalan emailküldést a backend nem ismétel meg automatikusan.
 
 A napi emailkeret 20 levél (`DAILY_MAILS`).
 
@@ -57,7 +57,7 @@ A Safari-megnyitási próba Web Inspectort igényel, nem Remote Automationt. A p
 - Az átvételi program akkumulátor-riportjában az `OriginalBattery` rendszerlogjelzés nem igazolja az akkumulátor eredetiségét, a csere tényét vagy a szerviz hivatalosságát. Hiányzó jelzésnél az eredet ismeretlen. Az akkumulátor gyártója és a szervizelőzmény jelenleg nem ellenőrzött.
 - A varázsló iPad-fájl kiolvasója feltételezett mezőnevekre épül (`Last_Value_CycleCount`, `MaximumCapacityPercent`), valódi fájllal még ellenőrizendő.
 - A Mac-parancs `system_profiler` kulcsnevei valódi Macen még ellenőrizendők.
-- A böngészős hardverteszt (érintés, mozgás, hang, kamera, kijelző) benne van a varázslóban, valódi eszközön az érintés, kamera és mikrofon még ellenőrizendő. A gombok és a fejhallgató-aljzat tesztje még nincs meg.
+- A böngészős hardverteszt (érintés, 3 tengelyes mozgás és giroszkóp, hang, kamera, kijelző) benne van a varázslóban, valódi eszközön az érintés, kamera és mikrofon még ellenőrizendő. A fizikai gombokat (hangerő, Home, bekapcsológomb) az USB-s akkumulátor-terhelésteszt ellenőrzi; a fejhallgató-aljzat tesztje még nincs meg.
 - A seller flow USB-riportja és webes tesztriportja külön küldhető ugyanazzal a meghívóval. A korábbi flow-galéria az előző, egy-riportos menet katalógusa; az új flow integrációs tesztje külön fut.
 - A varázsló a Safari 9.1-et (iOS 9.3.5) és az újabbakat célozza, ezért csak ES5-öt használ, `fetch` és `TextEncoder` nélkül. Az iOS 9.3.5 menünevei valódi iPaden ellenőrizve vannak, a többi rendszeré az Apple magyar oldalairól és útmutatókból származik, valódi eszközön még ellenőrizendők.
 

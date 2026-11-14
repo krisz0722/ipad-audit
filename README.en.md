@@ -46,7 +46,7 @@ There are two modes:
 
 Missing USB fields and unsupported browser tests are marked unknown/not tested, not as hardware faults. Data from a seller-controlled computer is not cryptographic proof.
 
-Data path: USB reader and the device browser -> Google Apps Script (`Meghívók` and `Tesztlépések` sheets); at the end, a combined report and—if requested at the beginning—a single seller email. An uncertain email delivery is not automatically repeated.
+Data path: USB reader and the device browser -> Google Apps Script (`Meghívók` and `Tesztlépések` sheets); at the end, a combined report and (if requested at the beginning) a single seller email. An uncertain email delivery is not automatically repeated.
 
 The daily mail allowance is 20 emails (`DAILY_MAILS`).
 
@@ -57,7 +57,7 @@ The Safari-opening attempt requires Web Inspector, not Remote Automation. The pr
 - In the receiving program's battery report, the `OriginalBattery` system log value does not verify battery authenticity, whether it was replaced, or whether the service was authorized. If the value is missing, the origin is unknown. The battery manufacturer and service history are not currently verified.
 - The iPad file reader in the wizard relies on assumed field names (`Last_Value_CycleCount`, `MaximumCapacityPercent`) and still needs to be checked against a real file.
 - The `system_profiler` key names used by the Mac command still need to be checked on a real Mac.
-- The in-browser hardware test (touch, motion, audio, camera, display) is part of the wizard. Touch, camera and microphone still need checking on a real device. A test for the buttons and the headphone jack does not exist yet.
+- The in-browser hardware test (touch grid, 3-axis motion and gyroscope, audio, camera, display) is part of the wizard. Touch, camera, and microphone still need checking on a real device. Physical buttons (volume, Home, lock) are monitored during the USB battery stress test; a test for the headphone jack does not exist yet.
 - The seller USB report and web test report can be sent separately using the same invitation. The previous flow gallery documents the older, single-report process; the new flow has a separate integration test.
 - The wizard targets Safari 9.1 (iOS 9.3.5) and newer, so it uses ES5 only, without `fetch` or `TextEncoder`. The iOS 9.3.5 menu names were checked on a real iPad, the names for other versions come from Apple's Hungarian pages and guides and still need checking on real devices.
 

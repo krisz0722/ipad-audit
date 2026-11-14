@@ -67,6 +67,8 @@ flowchart TD
   R -->|"consent and Send (chapter 7)"| DONE["Thank you"]
 ```
 
+When the seller opens the page on an iPad or iPhone using the continuation link (`#CODE.SESSION`), or when opened directly on iOS, the interface automatically jumps to the browser hardware test introduction (`web_intro`), skipping the device selection prompt.
+
 ## 3. iPad and iPhone: the battery data
 
 ```mermaid
@@ -108,12 +110,12 @@ Every test has three outcomes: it runs (a result), the seller skips it, or the b
 | Keyboard (Mac)           | every key lights up when pressed, ANSI or ISO layout, the top function row only with Fn, a double press raises a suspicion                        | measured          | any modern browser (needs the physical key code) |
 | Mouse and trackpad (Mac) | the cursor over a grid, five click points (the corners too), right click, scrolling up and down. Optional: horizontal scroll, pinch, double click | measured          | any modern browser                               |
 | Touch screen             | an 8x12 grid, every cell must be sensed, at the end two fingers                                                                                   | measured          | iOS 9                                            |
-| Motion sensors           | the range of acceleration on both axes and the rotation                                                                                           | measured          | iOS 9 (asks permission from iOS 13)              |
+| Motion sensors           | 3-axis acceleration (X, Y, Z) and bidirectional rotation (gyroscope)                                                                              | measured          | iOS 9 (asks permission from iOS 13)              |
 | Speaker and microphone   | four tones on the left and right channel, whether the microphone hears them                                                                       | measured          | iOS 11                                           |
 | Rear and front camera    | whether a live, non-uniform image arrives                                                                                                         | measured          | iOS 11                                           |
 | Display colors           | six colors, the seller says if something looks wrong                                                                                              | self-reported     | iOS 9                                            |
 
-The keyboard test cannot see the Fn, volume, brightness and Touch ID keys, because the system swallows them. The test for the buttons, the headphone jack and the charging port does not exist. The presence of the camera, the microphone and the touch controller could be read over USB, but that would not prove they work. This is not built in yet.
+The keyboard test cannot see the Fn, volume, brightness and Touch ID keys, because the system swallows them. Physical buttons (volume, Home, lock) are monitored during the USB battery stress test; a test for the headphone jack and charging port does not exist. The presence of the camera, the microphone and the touch controller could be read over USB, but that would not prove they work. This is not built in yet.
 
 ## 5. The USB program offer and the computer branch
 
