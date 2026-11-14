@@ -85,3 +85,46 @@ def test_run_interactive_runs_directly_and_returns_section(monkeypatch):
     assert section["title"] == "Fizikai gombok (USB)"
     assert section["rows"][0]["status"] == "ok"
     assert any("FIZIKAI GOMBOK ELLENŐRZÉSE" in msg for msg in messages)
+
+
+def test_collect_buttons_fallback_when_syslog_is_silent():
+    messages = []
+    signals = Signals()
+    now = [0.0]
+
+    class FakeLockdown:
+        pass
+
+    async def wait(seconds):
+        now[0] += seconds
+
+    # Igen válasz esetén ok státusz
+    section_ok = asyncio.run(
+        button_test.collect_buttons(
+            FakeLockdown(),
+            notify=messages.append,
+            timeout=5,
+            signals=signals,
+            clock=lambda: now[0],
+            wait=wait,
+            ask=lambda prompt: "igen",
+        )
+    )
+    assert section_ok["rows"][0]["status"] == "ok"
+    assert "eladó jóváhagyta" in section_ok["rows"][0]["value"]
+
+    # Nem válasz esetén bad státusz
+    now[0] = 0.0
+    section_bad = asyncio.run(
+        button_test.collect_buttons(
+            FakeLockdown(),
+            notify=messages.append,
+            timeout=5,
+            signals=signals,
+            clock=lambda: now[0],
+            wait=wait,
+            ask=lambda prompt: "nem",
+        )
+    )
+    assert section_bad["rows"][0]["status"] == "bad"
+    assert "hibásak" in section_bad["rows"][0]["value"]

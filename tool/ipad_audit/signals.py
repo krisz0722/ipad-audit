@@ -8,10 +8,10 @@ import threading
 import time
 
 _EVENTS = (
-    ("home", re.compile(r"\bHome page:0xC usage:0x40 downEvent:1")),
-    ("lock", re.compile(r"\bLock page:0xC usage:0x30 downEvent:1")),
-    ("vol_up", re.compile(r"\bVolumeIncrement page:0xC usage:0xE9 downEvent:1")),
-    ("vol_down", re.compile(r"\bVolumeDecrement page:0xC usage:0xEA downEvent:1")),
+    ("home", re.compile(r"(?:\bHome\s+page:0x[0-9a-fA-F]+\s+usage:0x[0-9a-fA-F]+\s+downEvent:1\b|\b(?:HomeButton|MenuButton)\b(?!\s*up)|\bhandle(?:Home|Menu)Button\b)", re.IGNORECASE)),
+    ("lock", re.compile(r"(?:\bLock\s+page:0x[0-9a-fA-F]+\s+usage:0x[0-9a-fA-F]+\s+downEvent:1\b|\b(?:LockButton|PowerButton|SleepButton)\b(?!\s*up)|\bhandle(?:Lock|Power|Sleep)Button\b)", re.IGNORECASE)),
+    ("vol_up", re.compile(r"(?:\bVolumeIncrement\s+page:0x[0-9a-fA-F]+\s+usage:0x[0-9a-fA-F]+\s+downEvent:1\b|\bVolumeIncrement\b(?!\s*page:.*?downEvent:0)|\bVolumeUp\b(?!\s*up))", re.IGNORECASE)),
+    ("vol_down", re.compile(r"(?:\bVolumeDecrement\s+page:0x[0-9a-fA-F]+\s+usage:0x[0-9a-fA-F]+\s+downEvent:1\b|\bVolumeDecrement\b(?!\s*page:.*?downEvent:0)|\bVolumeDown\b(?!\s*up))", re.IGNORECASE)),
     ("jack_in", re.compile(r"Headphone state changed \[1\b")),
     ("jack_out", re.compile(r"Headphone state changed \[0\b")),
 )

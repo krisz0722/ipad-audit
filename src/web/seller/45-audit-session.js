@@ -202,15 +202,20 @@ function auditOpen(next, create) {
       if (result.sections && result.sections.length) {
         for (var sIdx = 0; sIdx < result.sections.length; sIdx++) {
           if (result.sections[sIdx].title === "Fizikai gombok (USB)") {
-            var btnStatus = "ok";
-            var btnDetail = "USB-n ellenőrizve";
             var rows = result.sections[sIdx].rows || [];
-            if (rows.length && rows[0].value) {
-              btnDetail = rows[0].value;
-              if (rows[0].status === "bad") btnStatus = "bad";
+            if (rows.length && rows[0].status === "ok") {
+              state.hw.buttons = {
+                status: "ok",
+                detail: rows[0].value || "USB-n ellenőrizve"
+              };
+              save();
+            } else if (rows.length && rows[0].status === "bad") {
+              state.hw.buttons = {
+                status: "bad",
+                detail: rows[0].value || "hibás"
+              };
+              save();
             }
-            state.hw.buttons = { status: btnStatus, detail: btnDetail };
-            save();
             break;
           }
         }

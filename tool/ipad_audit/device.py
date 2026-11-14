@@ -147,14 +147,41 @@ async def collect(lockdown, notify):
 
 
 async def watch_syslog(lockdown, signals):
-    while True:
-        try:
-            async for entry in OsTraceService(lockdown=lockdown).syslog():
-                signals.feed(entry.message)
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            await asyncio.sleep(1)
+    from pymobiledevice3.services.os_trace import OsTraceService
+    from pymobiledevice3.services.syslog import SyslogService
+
+    async def _stream_ostrace():
+        while True:
+            try:
+                async for entry in OsTraceService(lockdown=lockdown).syslog():
+                    msg = getattr(entry, "message", None) or str(entry)
+                    signals.feed(msg)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                await asyncio.sleep(1)
+
+    async def _stream_syslog():
+        while True:
+            try:
+                async for line in SyslogService(lockdown=lockdown).watch():
+                    if isinstance(line, bytes):
+                        line = line.decode("utf-8", "replace")
+                    signals.feed(str(line))
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                await asyncio.sleep(1)
+
+    t1 = asyncio.create_task(_stream_ostrace())
+    t2 = asyncio.create_task(_stream_syslog())
+    try:
+        await asyncio.gather(t1, t2)
+    except asyncio.CancelledError:
+        t1.cancel()
+        t2.cancel()
+        await asyncio.gather(t1, t2, return_exceptions=True)
+        raise
 
 
 async def watch_flags(lockdown, signals):

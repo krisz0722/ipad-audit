@@ -345,7 +345,7 @@ def main(argv=None):
     print("\nEzt találtuk az eszközödön:", file=sys.stderr)
     for line in summary_lines(raw):
         print("  " + line, file=sys.stderr)
-    button_section = button_test.run_interactive(notify=notify)
+    button_section = button_test.run_interactive(notify=notify, ask=input)
     sections = usb_sections(raw)
     if button_section:
         sections.append(button_section)

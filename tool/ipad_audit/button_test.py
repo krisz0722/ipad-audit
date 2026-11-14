@@ -15,12 +15,19 @@ BUTTON_NAMES = {
 BUTTON_ORDER = ("vol_up", "vol_down", "lock", "home")
 
 
-def build_section(signals):
-    """Összefoglaló riportszakasz az érzékelt fizikai gombokból."""
-    events = signals.events if signals else {}
-    pressed = [BUTTON_NAMES[k] for k in BUTTON_ORDER if k in events]
-    status = "ok" if pressed else "nodata"
-    value = ", ".join(pressed) if pressed else "nem érzékelt gombnyomást a mérés alatt"
+def build_section(signals, confirmed=None):
+    """Összefoglaló riportszakasz az érzékelt vagy megerősített fizikai gombokból."""
+    if confirmed == "ok":
+        value = "Hangerő és bekapcsoló gombok működnek (eladó jóváhagyta)"
+        status = "ok"
+    elif confirmed == "bad":
+        value = "a gombok hibásak vagy beragadtak (eladó visszajelzése)"
+        status = "bad"
+    else:
+        events = signals.events if signals else {}
+        pressed = [BUTTON_NAMES[k] for k in BUTTON_ORDER if k in events]
+        status = "ok" if pressed else "nodata"
+        value = ", ".join(pressed) if pressed else "nem érzékelt gombnyomást a mérés alatt"
     rows = [
         {
             "label": "Fizikai gombok (USB)",
@@ -39,8 +46,8 @@ def format_summary(section):
     return "\n".join(lines)
 
 
-async def collect_buttons(lockdown, notify, timeout=20, signals=None, clock=time.monotonic, wait=asyncio.sleep):
-    """Gombok figyelése az élő syslogon keresztül."""
+async def collect_buttons(lockdown, notify, timeout=12, signals=None, clock=time.monotonic, wait=asyncio.sleep, ask=None):
+    """Gombok figyelése az élő syslogon keresztül, kódhiány esetén megerősítési lehetőséggel."""
     from ipad_audit import device
 
     live_signals = signals or Signals()
@@ -53,7 +60,7 @@ async def collect_buttons(lockdown, notify, timeout=20, signals=None, clock=time
     notify("  - Hangerő le (-)")
     notify("  - Bekapcsoló (Lock) gomb")
     notify("  - Kezdőképernyő (Home - ha van az eszközön)")
-    notify("(A terminál azonnal kiírja, amit érzékel. Időkorlát: %d másodperc.)" % int(timeout))
+    notify("(A terminál azonnal kiírja, ha a rendszer továbbítja a jelet. Figyelés: legfeljebb %d mp.)" % int(timeout))
 
     try:
         while clock() - started < timeout:
@@ -61,7 +68,9 @@ async def collect_buttons(lockdown, notify, timeout=20, signals=None, clock=time
                 if key in live_signals.events and key not in reported:
                     reported.add(key)
                     notify("  [USB gomb] %s megnyomva" % name)
-            if len(reported) >= len(BUTTON_NAMES):
+            has_vol = "vol_up" in reported and "vol_down" in reported
+            has_lock_or_home = "lock" in reported or "home" in reported
+            if (has_vol and has_lock_or_home) or len(reported) >= len(BUTTON_NAMES):
                 notify("Minden fizikai gomb érzékelve!")
                 break
             await wait(0.2)
@@ -72,10 +81,23 @@ async def collect_buttons(lockdown, notify, timeout=20, signals=None, clock=time
         except (asyncio.CancelledError, Exception):
             pass
 
+    if reported:
+        return build_section(live_signals)
+
+    if ask and callable(ask):
+        notify("\nA rendszernaplóban az iPadOS biztonsági korlátozásai miatt nem jelentek meg a gombkódok.")
+        while True:
+            ans = ask("Működnek a hangerő- és a bekapcsoló gombok az iPaden (megjelenik a hangerőcsík, lezár a képernyő)? [Igen/nem, Enter: igen]: ").strip().lower()
+            if ans in ("", "igen", "yes", "i", "y"):
+                return build_section(live_signals, confirmed="ok")
+            elif ans in ("nem", "no", "n"):
+                return build_section(live_signals, confirmed="bad")
+            notify("Kérlek válaszolj 'igen'-nel vagy 'nem'-mel.")
+
     return build_section(live_signals)
 
 
-def run_interactive(backend=None, code=None, sid=None, notify=print, lockdown_factory=None, clock=time.monotonic, wait=asyncio.sleep, timeout=20):
+def run_interactive(backend=None, code=None, sid=None, notify=print, lockdown_factory=None, clock=time.monotonic, wait=asyncio.sleep, timeout=12, ask=None):
     """Kötelező gombellenőrzés USB-n és összefoglaló szakasz készítése."""
     if callable(backend) and notify == print and code is None and sid is None:
         notify = backend
@@ -90,7 +112,7 @@ def run_interactive(backend=None, code=None, sid=None, notify=print, lockdown_fa
                 lockdown = await lockdown_factory()
         else:
             lockdown = await device.connect(notify)
-        return await collect_buttons(lockdown, notify, clock=clock, wait=wait, timeout=timeout)
+        return await collect_buttons(lockdown, notify, clock=clock, wait=wait, timeout=timeout, ask=ask)
 
     try:
         section = asyncio.run(_run())
@@ -101,5 +123,6 @@ def run_interactive(backend=None, code=None, sid=None, notify=print, lockdown_fa
         notify("Hiba a gombok USB-s figyelése közben: " + str(error))
         return None
 
-    notify(format_summary(section))
+    if section:
+        notify(format_summary(section))
     return section
