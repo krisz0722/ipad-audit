@@ -103,16 +103,32 @@ def install_apple_driver(notify):
             raise RuntimeError("Nem sikerült kicsomagolni az Apple illesztőprogramot.")
 
         notify("Illesztőprogram csendes telepítése... (Ha a Windows engedélyt kér, válaszd az Igent)")
-        cmd = (
-            f'Start-Process msiexec.exe -ArgumentList "/i", "\"{app_support}\"", "/qn", "/norestart" -Verb RunAs -Wait; '
-            f'Start-Process msiexec.exe -ArgumentList "/i", "\"{device_support}\"", "/qn", "/norestart" -Verb RunAs -Wait'
-        )
-        subprocess.run(
-            ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", cmd],
-            check=True,
+        batch_path = os.path.join(temp_dir, "install_driver.cmd")
+        with open(batch_path, "w", encoding="ascii") as f:
+            f.write(
+                "@echo off\r\n"
+                'start /wait msiexec.exe /i "%~dp0AppleApplicationSupport64.msi" /qn /norestart\r\n'
+                'start /wait msiexec.exe /i "%~dp0AppleMobileDeviceSupport64.msi" /qn /norestart\r\n'
+                'sc.exe start "Apple Mobile Device Service"\r\n'
+            )
+
+        ps_cmd = f'Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "`"{batch_path}`"" -Verb RunAs -Wait'
+        res = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_cmd],
+            capture_output=True,
+            text=True,
             timeout=180,
         )
+        if res.returncode != 0 and not is_service_installed():
+            err = res.stderr.strip() or res.stdout.strip() or f"exit status {res.returncode}"
+            if "canceled" in err.lower() or "megszakította" in err.lower() or "elutasít" in err.lower():
+                raise RuntimeError("A Windows rendszergazdai jóváhagyást nem adták meg (kattints az Igenre).")
+            raise RuntimeError(f"A telepítő futtatása nem sikerült: {err}")
+
         start_service()
+        if not is_service_installed():
+            raise RuntimeError("A telepítés lefutott, de a szolgáltatás nem jött létre.")
+
         notify("Az Apple illesztőprogram sikeresen telepítve, az átmeneti telepítőfájlok törölve.")
         return True
     except Exception as error:

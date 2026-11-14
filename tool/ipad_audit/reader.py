@@ -1,6 +1,8 @@
 """USB-s kiolvasó: riportküldés után az eladandó eszközön folytatódik a teszt."""
 import asyncio
 import argparse
+import json
+import os
 import re
 import secrets
 import sys
@@ -155,6 +157,40 @@ def usb_sections(raw):
     return [{"title": "USB-s kiolvasás", "rows": rows}]
 
 
+def get_session_file():
+    base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+    return os.path.join(base, ".ipad_audit_sessions.json")
+
+
+def load_session(code):
+    try:
+        path = get_session_file()
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return data.get(code)
+    except Exception:
+        pass
+    return None
+
+
+def save_session(code, sid):
+    try:
+        path = get_session_file()
+        data = {}
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except Exception:
+                pass
+        data[code] = sid
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+    except Exception:
+        pass
+
+
 def extract_code(text):
     if not text:
         return ""
@@ -209,9 +245,10 @@ def main(argv=None):
         print(message, file=sys.stderr)
 
     backend = Backend(config.BACKEND_URL)
-    sid = secrets.token_hex(16).upper()
+    sid = load_session(code) or secrets.token_hex(16).upper()
     try:
         backend.audit_begin(code, sid, email_requested=bool(copy_email))
+        save_session(code, sid)
     except BackendError as error:
         print("A tesztet nem sikerült elindítani: " + str(error), file=sys.stderr)
         print("Az új flow a repositoryban lévő Apps Script új deploymentjét igényli.", file=sys.stderr)

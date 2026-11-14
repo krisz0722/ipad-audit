@@ -728,3 +728,12 @@ def test_device_connect_ensures_driver(monkeypatch):
     assert checked == ["driver_ok"]
 
     assert reader.extract_code("") == ""
+
+
+def test_load_and_save_session(tmp_path, monkeypatch):
+    session_file = str(tmp_path / "sessions.json")
+    monkeypatch.setattr(reader, "get_session_file", lambda: session_file)
+    assert reader.load_session("123456789") is None
+    reader.save_session("123456789", "0123456789ABCDEF0123456789ABCDEF")
+    assert reader.load_session("123456789") == "0123456789ABCDEF0123456789ABCDEF"
+
