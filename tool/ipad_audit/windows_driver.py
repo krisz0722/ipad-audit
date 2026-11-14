@@ -4,10 +4,54 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.request
 
 APPLE_ITUNES_URL = "https://www.apple.com/itunes/download/win64"
 SERVICE_NAME = "Apple Mobile Device Service"
+
+
+def download_with_progress(url, dest_path, notify):
+    """Letölti a fájlt, miközben folyamatos MB- és százalékos folyamatjelzőt jelenít meg."""
+    req = urllib.request.Request(
+        url,
+        headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"},
+    )
+    with urllib.request.urlopen(req, timeout=120) as response:
+        total_size = int(response.headers.get("Content-Length") or 0)
+        downloaded = 0
+        chunk_size = 256 * 1024
+        last_pct = -1
+        last_time = time.time()
+        with open(dest_path, "wb") as f:
+            while True:
+                chunk = response.read(chunk_size)
+                if not chunk:
+                    break
+                f.write(chunk)
+                downloaded += len(chunk)
+                now = time.time()
+                if total_size > 0:
+                    pct = int(downloaded * 100 / total_size)
+                    if pct != last_pct and (now - last_time >= 0.25 or pct == 100):
+                        mb_done = downloaded / (1024 * 1024)
+                        mb_total = total_size / (1024 * 1024)
+                        bar_len = 24
+                        filled = int(bar_len * downloaded / total_size)
+                        bar = "=" * filled + "-" * (bar_len - filled)
+                        msg = f"\r[Letöltés: {mb_done:.1f}/{mb_total:.1f} MB ({pct}%)] [{bar}]"
+                        sys.stderr.write(msg)
+                        sys.stderr.flush()
+                        last_pct = pct
+                        last_time = now
+                else:
+                    if now - last_time >= 0.5:
+                        mb_done = downloaded / (1024 * 1024)
+                        sys.stderr.write(f"\r[Letöltés: {mb_done:.1f} MB]...")
+                        sys.stderr.flush()
+                        last_time = now
+        sys.stderr.write("\n")
+        sys.stderr.flush()
 
 
 def is_service_installed():
@@ -59,12 +103,7 @@ def install_apple_driver(notify):
     temp_dir = tempfile.mkdtemp(prefix="ipad_audit_driver_")
     setup_exe = os.path.join(temp_dir, "iTunes64Setup.exe")
     try:
-        req = urllib.request.Request(
-            APPLE_ITUNES_URL,
-            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"},
-        )
-        with urllib.request.urlopen(req, timeout=120) as response, open(setup_exe, "wb") as out_file:
-            shutil.copyfileobj(response, out_file)
+        download_with_progress(APPLE_ITUNES_URL, setup_exe, notify)
 
         notify("Telepítő letöltve. Illesztőprogram kicsomagolása...")
         extracted = False
@@ -113,14 +152,28 @@ def install_apple_driver(notify):
             )
 
         ps_cmd = f'Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "`"{batch_path}`"" -Verb RunAs -Wait'
-        res = subprocess.run(
+        proc = subprocess.Popen(
             ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_cmd],
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=180,
         )
-        if res.returncode != 0 and not is_service_installed():
-            err = res.stderr.strip() or res.stdout.strip() or f"exit status {res.returncode}"
+        spinner = ["|", "/", "-", "\\"]
+        idx = 0
+        start_t = time.time()
+        while proc.poll() is None:
+            elapsed = int(time.time() - start_t)
+            spin = spinner[idx % len(spinner)]
+            idx += 1
+            sys.stderr.write(f"\r[{spin}] Illesztőprogram telepítése a háttérben... ({elapsed} mp)")
+            sys.stderr.flush()
+            time.sleep(0.5)
+        sys.stderr.write("\n")
+        sys.stderr.flush()
+        stdout, stderr = proc.communicate()
+
+        if proc.returncode != 0 and not is_service_installed():
+            err = (stderr or stdout or f"exit status {proc.returncode}").strip()
             if "canceled" in err.lower() or "megszakította" in err.lower() or "elutasít" in err.lower():
                 raise RuntimeError("A Windows rendszergazdai jóváhagyást nem adták meg (kattints az Igenre).")
             raise RuntimeError(f"A telepítő futtatása nem sikerült: {err}")

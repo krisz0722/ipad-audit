@@ -217,7 +217,10 @@ def main(argv=None):
         return 1
     print("-" * 64, file=sys.stderr)
     print("  iPad Audit USB Kiolvasó", file=sys.stderr)
+    print("  Biztonságos, csak olvasó hardver-ellenőrző program", file=sys.stderr)
     print("-" * 64, file=sys.stderr)
+    print("[ok] Rendszer és modulok betöltve, készen áll a mérésre.\n", file=sys.stderr)
+    sys.stderr.flush()
     code = extract_code(args.code or input("A vásárlótól kapott meghívókód: "))
     if not re.fullmatch(r"(?:[0-9]{9}|[0-9A-Z]{12})", code):
         print("Hibás meghívókód.", file=sys.stderr)
