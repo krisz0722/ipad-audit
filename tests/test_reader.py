@@ -688,4 +688,43 @@ def test_extract_code():
     assert reader.extract_code("https://apple.audit.kokocloud.space/#123456789") == "123456789"
     assert reader.extract_code("https://apple.audit.kokocloud.space/#123456789.0123456789ABCDEF0123456789ABCDEF") == "123456789"
     assert reader.extract_code("DEMOFAKE1234") == "DEMOFAKE1234"
+
+
+def test_windows_driver_noop_on_non_windows(monkeypatch):
+    from ipad_audit import windows_driver
+
+    monkeypatch.setattr(windows_driver.sys, "platform", "linux")
+    assert windows_driver.ensure_driver(lambda m: None) is True
+    assert windows_driver.is_service_installed() is True
+
+
+def test_windows_driver_installs_when_missing(monkeypatch):
+    from ipad_audit import windows_driver
+
+    installed = []
+    monkeypatch.setattr(windows_driver.sys, "platform", "win32")
+    monkeypatch.setattr(windows_driver, "is_service_installed", lambda: False)
+    monkeypatch.setattr(windows_driver, "install_apple_driver", lambda notify: installed.append(True) or True)
+
+    assert windows_driver.ensure_driver(lambda m: None) is True
+    assert installed == [True]
+
+
+def test_device_connect_ensures_driver(monkeypatch):
+    from ipad_audit import device, windows_driver
+
+    checked = []
+    monkeypatch.setattr(windows_driver, "ensure_driver", lambda notify: checked.append("driver_ok") or True)
+
+    class DummyLockdown:
+        pass
+
+    async def mock_create(autopair=True):
+        return DummyLockdown()
+
+    monkeypatch.setattr(device, "create_using_usbmux", mock_create)
+    res = asyncio.run(device.connect(lambda m: None))
+    assert isinstance(res, DummyLockdown)
+    assert checked == ["driver_ok"]
+
     assert reader.extract_code("") == ""

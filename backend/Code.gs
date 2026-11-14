@@ -475,8 +475,12 @@ function auditBegin_(body) {
     auditError_("A meghívókód lejárt.");
   if (invite.values[AUDIT_COLUMNS.sid - 1] === body.sid)
     return json_({ ok: true, sid: body.sid, duplicate: true });
-  if (invite.values[COLS.status - 1] !== "új")
-    auditError_("Ezt a meghívót már másik teszthez használják.");
+  if (
+    invite.values[COLS.status - 1] !== "új" &&
+    invite.values[COLS.status - 1] !== "teszt folyamatban" &&
+    invite.values[COLS.status - 1] !== "teszt megszakadt"
+  )
+    auditError_("Ezt a meghívót már felhasználták, a teszt lezárult.");
   [
     "Session",
     "Eszközfajta",

@@ -33,20 +33,29 @@ ENTRIES = {
 
 async def connect(notify):
     """Addig próbál csatlakozni, amíg az eszköz meg nem jelenik és meg nem bízik a gépben."""
+    from ipad_audit import windows_driver
+
+    windows_driver.ensure_driver(notify)
+
     last = None
-    for _ in range(120):
+    for attempt in range(120):
         message = None
         try:
-            return await create_using_usbmux(autopair=True)
+            lockdown = await create_using_usbmux(autopair=True)
+            notify("iPad sikeresen észlelve.")
+            return lockdown
         except (NoDeviceConnectedError, ConnectionFailedError):
             message = "Dugd rá az iPadet adatkábellel, és oldd fel a kijelzőjét..."
         except (PairingDialogResponsePendingError, PasswordRequiredError):
             message = 'Oldd fel az iPadet, és koppints a "Megbízom" gombra...'
         except UserDeniedPairingError:
             message = 'A "Ne bízz" gombot nyomtad. Húzd ki és dugd vissza az iPadet, majd válaszd a "Megbízom" gombot.'
+        elapsed = int(attempt * 1.5)
         if message != last:
-            notify(message)
+            notify(f"[{elapsed:02d}s] {message}")
             last = message
+        elif attempt > 0 and attempt % 6 == 0:
+            notify(f"[{elapsed:02d}s] Várakozás az iPad csatlakozására...")
         await asyncio.sleep(1.5)
     raise TimeoutError("Az iPad 3 percen belül nem csatlakozott.")
 

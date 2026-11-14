@@ -28,7 +28,7 @@ SCREENS.usb_get = function () {
   var notes = "";
   if (os === "windows" || !os) {
     notes +=
-      '<div class="note"><b>Windows:</b> kattints a letöltött fájlra. Ha a rendszer figyelmeztet, válaszd a <b>További információ</b>, majd a <b>Futtatás mindenképpen</b> lehetőséget (Apple USB driver szükséges: iTunes vagy Apple Devices app).</div>';
+      '<div class="note"><b>Windows:</b> kattints a letöltött fájlra. Ha a rendszer figyelmeztet, válaszd a <b>További információ</b>, majd a <b>Futtatás mindenképpen</b> lehetőséget. Ha hiányzik az Apple USB illesztőprogramja, a program automatikusan felteszi a szükséges minimális drivert, majd a letöltött telepítőfájlokat azonnal törli.</div>';
   }
   if (os === "mac" || !os) {
     notes +=
@@ -123,7 +123,7 @@ SCREENS.usb_run = function () {
       "</li>" +
       "<li><b>Kiolvasás:</b> Indításkor add meg a fenti 9 jegyű kódot (" +
       (CODE ? '<b>' + esc(formatCode(CODE)) + '</b>' : 'a vásárlótól kapott kódot') +
-      "), és hagyd jóvá a mérést. (Opcionálisan 5 perces terhelésteszt is futtatható).</li>" +
+      "), és hagyd jóvá a mérést. (Ha a gépen még nincs Apple USB driver, a program automatikusan feltelepíti, majd a telepítőfájlokat rögtön törli).</li>" +
       "<li><b>Folytatás az eszközön:</b> A program kiírja a webes folytatólinket. Nyisd meg ezt a linket az iPaden vagy iPhone-on a hardvertesztekhez.</li>" +
       "</ol>" +
       '<div class="note"><b>Fontos:</b> A számítógépen futó ablakot hagyd nyitva a folyamat végéig, mert a webes tesztek lezárása után ez készíti el a végső riportot.</div>' +

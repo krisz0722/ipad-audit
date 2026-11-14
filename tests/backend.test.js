@@ -474,6 +474,22 @@ test("audit: bizonytalan emailküldés után nincs automatikus duplikálás", ()
   assert.strictEqual(attempts, 1);
 });
 
+test("audit: megszakadt vagy folyamatban lévő teszt újraindítható ugyanazzal a kóddal új sessionnel", () => {
+  const backend = makeBackend();
+  beginAudit(backend);
+  const newSid = "FEDCBA9876543210FEDCBA9876543210";
+  const retryResult = backend.call({
+    action: "audit_begin",
+    code: "123456789",
+    sid: newSid,
+    kind: "ios",
+    emailRequested: false,
+    consent: true,
+  });
+  assert.strictEqual(retryResult.ok, true, retryResult.error);
+  assert.strictEqual(retryResult.sid, newSid);
+});
+
 test("a report: ugyanaz a meghívó külön USB és webes emailt enged, retry nem duplikál", () => {
   const backend = makeBackend();
   backend.invite("123456789");

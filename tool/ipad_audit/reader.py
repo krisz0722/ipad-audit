@@ -179,6 +179,9 @@ def main(argv=None):
     except ValueError as error:
         print(str(error), file=sys.stderr)
         return 1
+    print("-" * 64, file=sys.stderr)
+    print("  iPad Audit USB Kiolvasó", file=sys.stderr)
+    print("-" * 64, file=sys.stderr)
     code = extract_code(args.code or input("A vásárlótól kapott meghívókód: "))
     if not re.fullmatch(r"(?:[0-9]{9}|[0-9A-Z]{12})", code):
         print("Hibás meghívókód.", file=sys.stderr)
