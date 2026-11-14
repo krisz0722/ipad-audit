@@ -81,19 +81,8 @@ async def collect_buttons(lockdown, notify, timeout=12, signals=None, clock=time
         except (asyncio.CancelledError, Exception):
             pass
 
-    if reported:
-        return build_section(live_signals)
-
-    if ask and callable(ask):
-        notify("\nA rendszernaplóban az iPadOS biztonsági korlátozásai miatt nem jelentek meg a gombkódok.")
-        while True:
-            ans = ask("Működnek a hangerő- és a bekapcsoló gombok az iPaden (megjelenik a hangerőcsík, lezár a képernyő)? [Igen/nem, Enter: igen]: ").strip().lower()
-            if ans in ("", "igen", "yes", "i", "y"):
-                return build_section(live_signals, confirmed="ok")
-            elif ans in ("nem", "no", "n"):
-                return build_section(live_signals, confirmed="bad")
-            notify("Kérlek válaszolj 'igen'-nel vagy 'nem'-mel.")
-
+    if not reported:
+        notify("\nA rendszernaplóban nem jelentek meg gombkódok (modern iPadOS esetén az Apple biztonsági korlátozása miatt nem továbbítja a rendszer).")
     return build_section(live_signals)
 
 

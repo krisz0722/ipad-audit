@@ -7,8 +7,7 @@ var HW_FLOW = {
     "audio",
     "camera_rear",
     "camera_front",
-    "display",
-    "buttons"
+    "display"
   ],
   mac: ["keyboard", "pointer", "audio", "camera_front", "display"]
 };
