@@ -523,6 +523,11 @@ function restore() {
       if (Object.prototype.hasOwnProperty.call(saved.state, key))
         state[key] = saved.state[key];
     }
+    if (state.auditQueue && state.auditQueue.length) {
+      state.auditQueue = state.auditQueue.filter(function (event) {
+        return event.step !== "buttons";
+      });
+    }
     state.sending = false;
     state.sent = false;
     return true;
@@ -614,6 +619,9 @@ function auditCall(payload) {
 }
 
 function auditFlush() {
+  while (state.auditQueue.length && state.auditQueue[0].step === "buttons") {
+    state.auditQueue.shift();
+  }
   if (
     DEMO ||
     !state.auditActive ||
@@ -645,6 +653,11 @@ function auditFlush() {
     },
     function (error) {
       auditPending = null;
+      if (error && error.message === "Hibás tesztlépés.") {
+        state.auditQueue.shift();
+        save();
+        return auditFlush();
+      }
       auditNotice(
         "A lépésmentésre várunk. A program újrapróbálja; az oldalt még ne zárd be."
       );
@@ -677,6 +690,7 @@ function auditRecord(step, status, sections) {
 }
 
 function auditHardware(name, status) {
+  if (name === "buttons") return;
   var step =
     name === "camera_rear" ? "rear" : name === "camera_front" ? "front" : name;
   auditRecord(step, status, webSections(collect()));
@@ -697,7 +711,6 @@ function auditScreen(name) {
     hw_camera_rear: "rear",
     hw_camera_front: "front",
     hw_display: "display",
-    hw_buttons: "buttons",
     hw_keyboard: "keyboard",
     hw_pointer: "pointer",
     review: "review"
@@ -787,9 +800,25 @@ function auditOpen(next, create) {
         state.auditSid = result.sid;
       state.auditEmailRequested = result.emailRequested;
       state.auditQueue = state.auditQueue.filter(function (event) {
-        return event.seq > result.seq;
+        return event.step !== "buttons" && event.seq > result.seq;
       });
       state.auditSeq = Math.max(state.auditSeq, result.seq);
+      if (result.sections && result.sections.length) {
+        for (var sIdx = 0; sIdx < result.sections.length; sIdx++) {
+          if (result.sections[sIdx].title === "Fizikai gombok (USB)") {
+            var btnStatus = "ok";
+            var btnDetail = "USB-n ellenőrizve";
+            var rows = result.sections[sIdx].rows || [];
+            if (rows.length && rows[0].value) {
+              btnDetail = rows[0].value;
+              if (rows[0].status === "bad") btnStatus = "bad";
+            }
+            state.hw.buttons = { status: btnStatus, detail: btnDetail };
+            save();
+            break;
+          }
+        }
+      }
       if (result.state !== "running") {
         done(
           result.sections,
@@ -1858,6 +1887,7 @@ function hwResult(name) {
   on("hw-next", hwNext);
 }
 function hwScreen(name, lead, extra, supported, unavailableText, pre) {
+  var alreadyDone = Boolean(state.hw[name]);
   show(
     top() +
       progress(4) +
@@ -1867,13 +1897,17 @@ function hwScreen(name, lead, extra, supported, unavailableText, pre) {
       lead +
       "</p>" +
       (pre || "") +
-      (supported
+      (supported && !alreadyDone
         ? '<button type="button" class="btn" id="hw-start">Indítás</button><p><button type="button" class="link" id="hw-skip">Kihagyom</button></p>'
         : "") +
       (extra || "") +
       '<div id="result"></div>' +
       foot()
   );
+  if (alreadyDone) {
+    hwResult(name);
+    return false;
+  }
   if (!supported) {
     hwDone(name, "unavailable", unavailableText);
     hwResult(name);
@@ -2877,13 +2911,13 @@ function startButtons() {
   }
 
   var html =
-    '<div class="card" style="margin: 1.5em 0; padding: 1em; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">' +
+    '<div class="card" style="margin: 1.5em 0;">' +
     '<div id="btn-lock-group" style="margin-bottom: 1.2em;">' +
     "<strong>1. Bekapcsoló (Lock) vagy Home gomb</strong>" +
     '<p style="margin: 0.5em 0;">Zárold a képernyőt a bekapcsoló gombbal vagy nyomd meg a Home gombot, majd ébreszd fel az eszközt és térj vissza ide a Safariba!</p>' +
     '<div id="btn-lock-badge" class="note" style="margin-top: 0.5em;">⏳ Várakozás a képernyőzárra és visszatérésre...</div>' +
     "</div>" +
-    '<hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 1em 0;">' +
+    '<hr style="border: 0; border-top: 1px solid var(--line); margin: 1.2em 0;">' +
     '<div id="btn-vol-group">' +
     "<strong>2. Hangerő fel (+) és Hangerő le (-) gombok</strong>" +
     '<p style="margin: 0.5em 0;">Nyomd meg az eszköz oldalán a hangerőgombokat! Látod a képernyőn megjelenni és elmozdulni a hangerőjelzőt?</p>' +

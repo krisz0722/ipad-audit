@@ -40,6 +40,11 @@ function restore() {
       if (Object.prototype.hasOwnProperty.call(saved.state, key))
         state[key] = saved.state[key];
     }
+    if (state.auditQueue && state.auditQueue.length) {
+      state.auditQueue = state.auditQueue.filter(function (event) {
+        return event.step !== "buttons";
+      });
+    }
     state.sending = false;
     state.sent = false;
     return true;

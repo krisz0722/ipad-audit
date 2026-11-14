@@ -61,15 +61,8 @@ def test_collect_buttons_stops_early_when_all_buttons_detected():
     assert any("Minden fizikai gomb érzékelve" in msg for msg in messages)
 
 
-def test_run_interactive_runs_directly_and_saves_event(monkeypatch):
+def test_run_interactive_runs_directly_and_returns_section(monkeypatch):
     messages = []
-    sent = []
-
-    class FakeBackend:
-        def audit_event(self, code, sid, seq, step, status, sections=None):
-            sent.append((code, sid, seq, step, status, sections))
-            return {"ok": True}
-
     signals = Signals()
     signals.feed("VolumeIncrement page:0xC usage:0xE9 downEvent:1", now=0.1)
 
@@ -85,15 +78,10 @@ def test_run_interactive_runs_directly_and_saves_event(monkeypatch):
         return FakeLockdown()
 
     section = button_test.run_interactive(
-        FakeBackend(),
-        "123456789",
-        "A" * 32,
         notify=messages.append,
         lockdown_factory=fake_connect,
     )
     assert section is not None
-    assert len(sent) == 1
-    assert sent[0][0] == "123456789"
-    assert sent[0][2] == 2
-    assert sent[0][3] == "buttons"
-    assert sent[0][4] == "ok"
+    assert section["title"] == "Fizikai gombok (USB)"
+    assert section["rows"][0]["status"] == "ok"
+    assert any("FIZIKAI GOMBOK ELLENŐRZÉSE" in msg for msg in messages)

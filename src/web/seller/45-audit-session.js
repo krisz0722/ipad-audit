@@ -15,6 +15,9 @@ function auditCall(payload) {
 }
 
 function auditFlush() {
+  while (state.auditQueue.length && state.auditQueue[0].step === "buttons") {
+    state.auditQueue.shift();
+  }
   if (
     DEMO ||
     !state.auditActive ||
@@ -46,6 +49,11 @@ function auditFlush() {
     },
     function (error) {
       auditPending = null;
+      if (error && error.message === "Hibás tesztlépés.") {
+        state.auditQueue.shift();
+        save();
+        return auditFlush();
+      }
       auditNotice(
         "A lépésmentésre várunk. A program újrapróbálja; az oldalt még ne zárd be."
       );
@@ -78,6 +86,7 @@ function auditRecord(step, status, sections) {
 }
 
 function auditHardware(name, status) {
+  if (name === "buttons") return;
   var step =
     name === "camera_rear" ? "rear" : name === "camera_front" ? "front" : name;
   auditRecord(step, status, webSections(collect()));
@@ -98,7 +107,6 @@ function auditScreen(name) {
     hw_camera_rear: "rear",
     hw_camera_front: "front",
     hw_display: "display",
-    hw_buttons: "buttons",
     hw_keyboard: "keyboard",
     hw_pointer: "pointer",
     review: "review"
@@ -188,9 +196,25 @@ function auditOpen(next, create) {
         state.auditSid = result.sid;
       state.auditEmailRequested = result.emailRequested;
       state.auditQueue = state.auditQueue.filter(function (event) {
-        return event.seq > result.seq;
+        return event.step !== "buttons" && event.seq > result.seq;
       });
       state.auditSeq = Math.max(state.auditSeq, result.seq);
+      if (result.sections && result.sections.length) {
+        for (var sIdx = 0; sIdx < result.sections.length; sIdx++) {
+          if (result.sections[sIdx].title === "Fizikai gombok (USB)") {
+            var btnStatus = "ok";
+            var btnDetail = "USB-n ellenőrizve";
+            var rows = result.sections[sIdx].rows || [];
+            if (rows.length && rows[0].value) {
+              btnDetail = rows[0].value;
+              if (rows[0].status === "bad") btnStatus = "bad";
+            }
+            state.hw.buttons = { status: btnStatus, detail: btnDetail };
+            save();
+            break;
+          }
+        }
+      }
       if (result.state !== "running") {
         done(
           result.sections,

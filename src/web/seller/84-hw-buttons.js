@@ -60,13 +60,13 @@ function startButtons() {
   }
 
   var html =
-    '<div class="card" style="margin: 1.5em 0; padding: 1em; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">' +
+    '<div class="card" style="margin: 1.5em 0;">' +
     '<div id="btn-lock-group" style="margin-bottom: 1.2em;">' +
     "<strong>1. Bekapcsoló (Lock) vagy Home gomb</strong>" +
     '<p style="margin: 0.5em 0;">Zárold a képernyőt a bekapcsoló gombbal vagy nyomd meg a Home gombot, majd ébreszd fel az eszközt és térj vissza ide a Safariba!</p>' +
     '<div id="btn-lock-badge" class="note" style="margin-top: 0.5em;">⏳ Várakozás a képernyőzárra és visszatérésre...</div>' +
     "</div>" +
-    '<hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 1em 0;">' +
+    '<hr style="border: 0; border-top: 1px solid var(--line); margin: 1.2em 0;">' +
     '<div id="btn-vol-group">' +
     "<strong>2. Hangerő fel (+) és Hangerő le (-) gombok</strong>" +
     '<p style="margin: 0.5em 0;">Nyomd meg az eszköz oldalán a hangerőgombokat! Látod a képernyőn megjelenni és elmozdulni a hangerőjelzőt?</p>' +

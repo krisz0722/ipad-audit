@@ -272,14 +272,17 @@ def main(argv=None):
     print("\nEzt találtuk az eszközödön:", file=sys.stderr)
     for line in summary_lines(raw):
         print("  " + line, file=sys.stderr)
+    button_section = button_test.run_interactive(notify=notify)
+    sections = usb_sections(raw)
+    if button_section:
+        sections.append(button_section)
     try:
-        backend.audit_event(code, sid, 1, "usb", "ok", usb_sections(raw))
+        backend.audit_event(code, sid, 1, "usb", "ok", sections)
         print("A USB-adatok mentését a szerver visszaigazolta. Email még nem ment el.", file=sys.stderr)
     except BackendError as error:
         print("A USB-adatok mentése nem igazolt: " + str(error), file=sys.stderr)
         pause()
         return 1
-    button_test.run_interactive(backend, code, sid, notify)
     battery_test.run_interactive(backend, code, sid, notify, ask=input)
     if copy_email:
         try:

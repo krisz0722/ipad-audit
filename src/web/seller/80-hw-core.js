@@ -78,6 +78,7 @@ function hwResult(name) {
   on("hw-next", hwNext);
 }
 function hwScreen(name, lead, extra, supported, unavailableText, pre) {
+  var alreadyDone = Boolean(state.hw[name]);
   show(
     top() +
       progress(4) +
@@ -87,13 +88,17 @@ function hwScreen(name, lead, extra, supported, unavailableText, pre) {
       lead +
       "</p>" +
       (pre || "") +
-      (supported
+      (supported && !alreadyDone
         ? '<button type="button" class="btn" id="hw-start">Indítás</button><p><button type="button" class="link" id="hw-skip">Kihagyom</button></p>'
         : "") +
       (extra || "") +
       '<div id="result"></div>' +
       foot()
   );
+  if (alreadyDone) {
+    hwResult(name);
+    return false;
+  }
   if (!supported) {
     hwDone(name, "unavailable", unavailableText);
     hwResult(name);

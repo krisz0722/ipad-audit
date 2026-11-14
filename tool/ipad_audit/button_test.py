@@ -75,8 +75,11 @@ async def collect_buttons(lockdown, notify, timeout=20, signals=None, clock=time
     return build_section(live_signals)
 
 
-def run_interactive(backend, code, sid, notify, lockdown_factory=None, clock=time.monotonic, wait=asyncio.sleep, timeout=20):
-    """Kötelező gombellenőrzés USB-n és mentés a Sheetbe."""
+def run_interactive(backend=None, code=None, sid=None, notify=print, lockdown_factory=None, clock=time.monotonic, wait=asyncio.sleep, timeout=20):
+    """Kötelező gombellenőrzés USB-n és összefoglaló szakasz készítése."""
+    if callable(backend) and notify == print and code is None and sid is None:
+        notify = backend
+        backend = None
     from ipad_audit import device
 
     async def _run():
@@ -99,11 +102,4 @@ def run_interactive(backend, code, sid, notify, lockdown_factory=None, clock=tim
         return None
 
     notify(format_summary(section))
-    if backend and code and sid:
-        try:
-            status = "ok" if section["rows"][0]["status"] == "ok" else "bad"
-            backend.audit_event(code, sid, 2, "buttons", status, [section])
-            notify("A gombellenőrzés eredményét a Sheetbe mentettük.")
-        except BackendError as error:
-            notify("A gombellenőrzés mentése átmenetileg sikertelen: " + str(error))
     return section
