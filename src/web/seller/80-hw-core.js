@@ -44,6 +44,7 @@ function hwNext() {
 function hwDone(name, status, detail) {
   state.hw[name] = { status: status, detail: detail || "" };
   save();
+  auditHardware(name, status);
 }
 function hwResult(name) {
   var r = state.hw[name];
@@ -129,6 +130,7 @@ SCREENS.hw_intro = function () {
   });
   on("hw-no", function () {
     state.hwSkipped = true;
+    auditRecord("skip", "skipped", webSections(collect()));
     go(afterHw());
   });
 };

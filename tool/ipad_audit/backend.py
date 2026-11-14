@@ -49,8 +49,32 @@ class Backend:
         if not result.get("ok"):
             raise BackendError(result.get("error") or "A riport küldése nem sikerült.")
 
-    def report(self, code, kind, serial, sections):
-        result = self.post({"action": "report", "code": code, "kind": kind, "serial": serial, "sections": sections})
+    def report(self, code, kind, serial, sections, copy_email=""):
+        payload = {"action": "report", "code": code, "kind": kind, "serial": serial, "sections": sections}
+        if copy_email:
+            payload["copyEmail"] = copy_email
+        result = self.post(payload)
         if not result.get("ok"):
             raise BackendError(result.get("error") or "A riport küldése nem sikerült.")
         return result
+
+    def _audit(self, action, code, sid, **values):
+        result = self.post({"action": action, "code": code, "sid": sid, **values})
+        if not result.get("ok"):
+            raise BackendError(result.get("error") or "A teszt mentése nem sikerült.")
+        return result
+
+    def audit_begin(self, code, sid, email_requested=False, kind="ios"):
+        return self._audit("audit_begin", code, sid, kind=kind, emailRequested=bool(email_requested), consent=True)
+
+    def audit_event(self, code, sid, seq, step, status, sections=None):
+        return self._audit("audit_event", code, sid, seq=seq, step=step, status=status, sections=sections or [])
+
+    def audit_status(self, code, sid, after=0):
+        return self._audit("audit_status", code, sid, after=after)
+
+    def audit_email(self, code, sid, email):
+        return self._audit("audit_email", code, sid, email=email)
+
+    def audit_battery(self, code, sid, samples, section):
+        return self._audit("audit_battery", code, sid, samples=samples, section=section)

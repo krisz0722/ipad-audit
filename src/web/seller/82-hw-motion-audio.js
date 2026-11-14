@@ -3,7 +3,7 @@ SCREENS.hw_motion = function () {
   if (
     hwScreen(
       "motion",
-      "Koppints az Indításra, majd dönts meg és fordíts el az eszközt minden irányba kb. fél percig.",
+      "Koppints az Indításra, majd döntsd meg balra-jobbra, előre-hátra, fordítsd függőlegesbe, és forgasd meg oda-vissza mindhárom tengely körül. A lista élőben pipálja ki a kész irányokat.",
       "",
       true,
       ""
@@ -21,7 +21,40 @@ function startMotion() {
   }
   var tracker = P.motionTracker(),
     finished = false,
+    lastMask = -1,
     timer;
+  function renderProgress(st) {
+    var c = st.checks || {};
+    var mask =
+      (c.tiltX ? 1 : 0) |
+      (c.tiltY ? 2 : 0) |
+      (c.tiltZ ? 4 : 0) |
+      (c.gyroBeta ? 8 : 0) |
+      (c.gyroGamma ? 16 : 0) |
+      (c.gyroAlpha ? 32 : 0);
+    if (mask === lastMask) return;
+    lastMask = mask;
+    var items = [
+      [c.tiltX, "Balra és jobbra döntés (gyorsulásmérő X)"],
+      [c.tiltY, "Előre és hátra döntés (gyorsulásmérő Y)"],
+      [c.tiltZ, "Függőlegesbe állítás / megfordítás (gyorsulásmérő Z)"],
+      [c.gyroBeta, "Előre-hátra billentés oda-vissza (giroszkóp X)"],
+      [c.gyroGamma, "Balra-jobbra forgatás oda-vissza (giroszkóp Y)"],
+      [c.gyroAlpha, "Síkbeli elforgatás oda-vissza (giroszkóp Z)"]
+    ];
+    var html =
+      '<p class="muted">Mozgasd az eszközt minden irányba (' +
+      (st.doneCount || 0) +
+      " / " +
+      (st.totalChecks || 6) +
+      ' irány kész):</p><ul class="plain">';
+    for (var i = 0; i < items.length; i++) {
+      html +=
+        "<li>" + (items[i][0] ? "✅ " : "⬜ ") + esc(items[i][1]) + "</li>";
+    }
+    html += "</ul>";
+    message("result", html);
+  }
   function finish(status, detail) {
     if (finished) return;
     finished = true;
@@ -33,25 +66,39 @@ function startMotion() {
   function onMotion(event) {
     tracker.feed(event.accelerationIncludingGravity, event.rotationRate);
     var st = tracker.state();
-    if (st.complete)
+    if (st.complete) {
       finish(
         "ok",
         "mért mozgás: " +
           Math.round(st.rangeX) +
-          " és " +
+          " / " +
           Math.round(st.rangeY) +
-          " m/s² tartomány, " +
+          " / " +
+          Math.round(st.rangeZ) +
+          " m/s² (X/Y/Z), " +
           Math.round(st.rotation) +
-          " °/s forgás"
+          " °/s oda-vissza forgás (3 tengely)"
       );
+      return;
+    }
+    renderProgress(st);
   }
   function begin() {
-    message("result", '<p class="muted">Mozgasd az eszközt...</p>');
+    renderProgress(tracker.state());
     window.addEventListener("devicemotion", onMotion);
     timer = setTimeout(function () {
-      if (tracker.state().events === 0)
+      var st = tracker.state();
+      if (st.events === 0)
         finish("bad", "nem érkezett mozgásadat az érzékelőtől");
-      else finish("skipped", "a mozgás nem érte el a küszöböt");
+      else
+        finish(
+          "skipped",
+          "a mozgás nem érte el a küszöböt minden irányban (" +
+            (st.doneCount || 0) +
+            " / " +
+            (st.totalChecks || 6) +
+            " kész)"
+        );
     }, 40000);
   }
   if (window.DeviceMotionEvent.requestPermission) {

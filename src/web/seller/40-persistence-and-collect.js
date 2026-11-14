@@ -33,6 +33,7 @@ function restore() {
     if (!Array.isArray(saved.state.path) || typeof saved.state.idx !== "number")
       return false;
     if (CODE && saved.code && CODE !== saved.code) return false;
+    if (LINK_SID && saved.state.auditSid !== LINK_SID) return false;
     DEMO = !!saved.demo;
     CODE = saved.code || "";
     for (var key in saved.state) {

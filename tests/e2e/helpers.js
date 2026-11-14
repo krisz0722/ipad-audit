@@ -201,8 +201,8 @@ async function hwMotion(page, f, mode) {
   await f.step('Mozgás: Indítás', () => page.locator('#hw-start').click());
   await expect(page.locator('#result')).toContainText('Mozgasd az eszközt');
   await page.evaluate(() => {
-    window.dispatchEvent(new DeviceMotionEvent('devicemotion', { accelerationIncludingGravity: { x: -6, y: -5, z: 0 }, rotationRate: { alpha: 10, beta: 0, gamma: 0 } }));
-    window.dispatchEvent(new DeviceMotionEvent('devicemotion', { accelerationIncludingGravity: { x: 6, y: 5, z: 0 }, rotationRate: { alpha: 0, beta: 55, gamma: 0 } }));
+    window.dispatchEvent(new DeviceMotionEvent('devicemotion', { accelerationIncludingGravity: { x: -6, y: -5, z: -9 }, rotationRate: { alpha: -50, beta: -50, gamma: -50 } }));
+    window.dispatchEvent(new DeviceMotionEvent('devicemotion', { accelerationIncludingGravity: { x: 6, y: 5, z: 1 }, rotationRate: { alpha: 50, beta: 55, gamma: 50 } }));
   });
   await expect(page.locator('#result')).toContainText('mért mozgás');
   await f.snap('Mozgás: eredmény');

@@ -4,9 +4,9 @@
   "description": "Remote condition check for used iPads, iPhones and Macs",
   "scripts": {
     "start": "bash scripts/serve.sh",
-    "usb": "PYTHONPATH=tool .venv/bin/python -m ipad_audit.reader",
+    "usb": "PYTHONPATH=tool .venv/bin/python -m ipad_audit.reader --dev",
     "audit": "PYTHONPATH=tool .venv/bin/python -m ipad_audit.main",
-    "test": "node --test tests/seller_parse.test.js tests/example.test.js tests/docs.test.js tests/backend.test.js tests/es5.test.js tests/build.test.js",
+    "test": "node --test tests/seller_parse.test.js tests/example.test.js tests/docs.test.js tests/backend.test.js tests/audit_web.test.js tests/es5.test.js tests/build.test.js",
     "test:integration": "node --test tests/reader_web_browser.test.js tests/two_reports_browser.test.js",
     "e2e": "node scripts/build-web.js && playwright test",
     "gallery": "node scripts/build-flows-gallery.js",
