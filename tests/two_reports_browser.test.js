@@ -104,14 +104,17 @@ test(
             "/#123456789\\.[0-9A-F]{32}$",
         ),
       );
-      assert.equal(appsScript.mails.length, 0);
+      assert.equal(appsScript.mails.length, 1);
+      assert.equal(appsScript.mails[0].to, "reader@example.test");
+      assert.match(appsScript.mails[0].subject, /iPad audit folytatása/);
       assert.equal(appsScript.rows[1][3], "teszt folyamatban");
       assert.match(JSON.stringify(appsScript.eventRows), /DMPS00000FAK/);
       assert.doesNotMatch(
         JSON.stringify({
           rows: appsScript.rows,
           events: appsScript.eventRows,
-          requests,
+          cache: Array.from(appsScript.cache),
+          props: Array.from(appsScript.props),
         }),
         /reader@example\.test/,
       );
@@ -169,7 +172,7 @@ test(
       await page.locator("#hw-no").click();
       assert.equal(await page.locator("#consent").isChecked(), false);
       assert.equal(await page.locator("#copy-email").count(), 0);
-      assert.equal(appsScript.mails.length, 0);
+      assert.equal(appsScript.mails.length, 1);
       await page.locator("#consent").check();
       await page.locator("#send").click();
       await page.locator("#msg .error").waitFor();
@@ -177,7 +180,7 @@ test(
         await page.locator("#msg").innerText(),
         /átmenetileg foglalt/,
       );
-      assert.equal(appsScript.mails.length, 0);
+      assert.equal(appsScript.mails.length, 1);
       await page.reload();
       assert.equal(await page.locator("#consent").isChecked(), false);
       await page.locator("#consent").check();
@@ -220,13 +223,13 @@ test(
         readerOutput,
         /apple\.audit\.kokocloud\.space|DMPS00000FAK|reader@example\.test/,
       );
-      assert.equal(appsScript.mails.length, 1);
-      assert.equal(appsScript.mails[0].to, "reader@example.test");
-      assert.equal(appsScript.mails[0].bcc, undefined);
-      assert.match(appsScript.mails[0].subject, /összesített riport/);
-      assert.match(appsScript.mails[0].body, /DMPS00000FAK/);
-      assert.match(appsScript.mails[0].body, /Hardverteszt/);
-      assert.match(appsScript.mails[0].body, /A teszt menete/);
+      assert.equal(appsScript.mails.length, 2);
+      assert.equal(appsScript.mails[1].to, "reader@example.test");
+      assert.equal(appsScript.mails[1].bcc, undefined);
+      assert.match(appsScript.mails[1].subject, /összesített riport/);
+      assert.match(appsScript.mails[1].body, /DMPS00000FAK/);
+      assert.match(appsScript.mails[1].body, /Hardverteszt/);
+      assert.match(appsScript.mails[1].body, /A teszt menete/);
       assert.doesNotMatch(
         JSON.stringify({
           rows: appsScript.rows,

@@ -20,6 +20,7 @@ def mock_audit_backend(monkeypatch):
     monkeypatch.setattr(reader.secrets, "token_hex", lambda length: AUDIT_SID.lower())
     monkeypatch.setattr(Backend, "audit_begin", lambda self, *args, **options: calls.append(("begin", args, options)) or {"ok": True})
     monkeypatch.setattr(Backend, "audit_event", lambda self, *args, **options: calls.append(("event", args, options)) or {"ok": True})
+    monkeypatch.setattr(Backend, "audit_link", lambda self, *args, **options: calls.append(("link", args, options)) or {"ok": True, "linkSent": True})
     monkeypatch.setattr(battery_test, "run_interactive", lambda *args, **options: None)
     monkeypatch.setattr(audit, "watch", lambda *args, **options: calls.append(("watch", args, options)) or "completed")
     return calls
@@ -246,6 +247,25 @@ def test_main_waits_for_web_result_without_claiming_early_email(monkeypatch, cap
     monkeypatch.setattr(reader_web, "open_on_device", lambda code, **options: False)
     assert reader.main(["--code", "123456789"]) == exit_code
     assert "elküldtük" not in capsys.readouterr().err
+
+
+def test_main_sends_continuation_link_via_audit_link_when_email_requested(monkeypatch, capsys, mock_audit_backend):
+    from ipad_audit import reader_web
+
+    answers = iter(["igen", "seller@example.test"])
+    monkeypatch.setattr("builtins.input", lambda prompt: next(answers))
+
+    async def read(notify):
+        return RAW
+
+    monkeypatch.setattr(reader, "read_raw", read)
+    monkeypatch.setattr(reader_web, "open_on_device", lambda *args, **options: False)
+    assert reader.main(["--code", "123456789"]) == 0
+    output = capsys.readouterr()
+    assert "A folytatólinket kiküldtük az emailcímedre" in output.err
+    link_calls = [call for call in mock_audit_backend if call[0] == "link"]
+    assert len(link_calls) == 1
+    assert link_calls[0][1] == ("123456789", AUDIT_SID, "seller@example.test")
 
 
 def test_main_failed_delivery_prints_link_without_opening_any_browser(monkeypatch, capsys):
