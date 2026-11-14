@@ -358,6 +358,47 @@ test("parseUsbOutput kiolvassa a blokkot és a körülötte lévő szöveget fig
   assert.ok(!JSON.stringify(r).includes("a1b2c3d4"));
 });
 
+test("parseUsbOutput és buildSections kezeli az akku gyártói és sorozatszám adatait", () => {
+  const usbWithBattery = [
+    "IPAD-AUDIT-USB 1",
+    "model: iPad5,4",
+    "model_name: iPad Air 2",
+    "os: 15.8.5",
+    "serial: DMPS00000FAK",
+    "cycles: 120",
+    "capacity_percent: 89.9",
+    "battery_manufacturer: Sunwoda (SWD)",
+    "battery_serial: F8Y93231G40L3P0AR",
+    "battery_device_name: bq27546",
+    "battery_mfg_date: 2016.04.22",
+    "END",
+  ].join("\n");
+  const r = P.parseUsbOutput(usbWithBattery);
+  assert.strictEqual(r.valid, true);
+  assert.strictEqual(r.batteryManufacturer, "Sunwoda (SWD)");
+  assert.strictEqual(r.batterySerial, "F8Y93231G40L3P0AR");
+  assert.strictEqual(r.batteryDeviceName, "bq27546");
+  assert.strictEqual(r.batteryMfgDate, "2016.04.22");
+
+  const sections = P.buildSections({
+    kind: "ios",
+    cycles: 120,
+    capacity: 90,
+    batteryManufacturer: r.batteryManufacturer,
+    batterySerial: r.batterySerial,
+    batteryDeviceName: r.batteryDeviceName,
+    batteryMfgDate: r.batteryMfgDate,
+    sources: { cycles: "USB-ből", capacity: "USB-ből" },
+  });
+  const batSec = sections.find((s) => s.title === "Akkumulátor");
+  assert.ok(batSec);
+  const rows = Object.fromEntries(batSec.rows.map((row) => [row.label, row.value]));
+  assert.strictEqual(rows["Akku gyártója"], "Sunwoda (SWD)");
+  assert.strictEqual(rows["Akku sorozatszáma"], "F8Y93231G40L3P0AR");
+  assert.strictEqual(rows["Akku vezérlő (Gas Gauge)"], "bq27546");
+  assert.strictEqual(rows["Akku gyártási ideje"], "2016.04.22");
+});
+
 test("parseUsbOutput érvénytelen vagy üres szövegre nem valid, hibás értéket eldob", () => {
   assert.strictEqual(P.parseUsbOutput("hello").valid, false);
   assert.strictEqual(P.parseUsbOutput("").valid, false);

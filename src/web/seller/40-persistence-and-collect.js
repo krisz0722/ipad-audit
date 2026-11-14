@@ -95,6 +95,14 @@ function collect() {
     batteryDefer: !!state.noLog,
     condition: e.condition,
     fileDate: e.fileDate,
+    batteryManufacturer:
+      state.route === "usb" ? clean(e.batteryManufacturer, 40) : "",
+    batterySerial:
+      state.route === "usb" ? clean(e.batterySerial, 30) : "",
+    batteryDeviceName:
+      state.route === "usb" ? clean(e.batteryDeviceName, 30) : "",
+    batteryMfgDate:
+      state.route === "usb" ? clean(e.batteryMfgDate, 30) : "",
     apple: state.apple,
     activationLock: e.activationLock,
     dep: e.dep,

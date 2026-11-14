@@ -1,4 +1,5 @@
 """A riport sorainak előállítása. Csak adatfeldolgozás, eszközt nem érint."""
+import re
 
 OK, WARN, BAD, INFO, NODATA = "ok", "warn", "bad", "info", "nodata"
 USB, MEASURED, SELF = "USB", "MÉRT", "BEMONDÁS"
@@ -60,18 +61,147 @@ def _threshold(value, good, warn):
     return OK if value >= good else (WARN if value >= warn else BAD)
 
 
+BATTERY_MANUFACTURERS = {
+    "SMP": "Simplo",
+    "SWD": "Sunwoda",
+    "DSY": "Desay",
+    "HBL": "Huapu",
+    "ATL": "Amperex (ATL)",
+    "LG": "LG Chem",
+    "LGC": "LG Chem",
+    "SONY": "Sony",
+    "SDI": "Samsung SDI",
+    "DYN": "Dynapack",
+    "DP": "Dynapack",
+    "SIMPLO": "Simplo",
+    "SUNWODA": "Sunwoda",
+    "DESAY": "Desay",
+    "AMPEREX": "Amperex (ATL)",
+}
+
+SERIAL_PREFIX_MANUFACTURERS = {
+    "FG6": "Simplo",
+    "F9G": "Simplo",
+    "FXK": "Simplo",
+    "F8Y": "Sunwoda",
+    "F7H": "Sunwoda",
+    "D87": "Desay",
+    "D84": "Desay",
+    "DLN": "Amperex (ATL)",
+    "D04": "Amperex (ATL)",
+    "C01": "Dynapack",
+    "BG6": "LG Chem",
+    "A21": "Sony",
+}
+
+
+def _battery_serial(raw):
+    gestalt = raw.get("gestalt") or {}
+    bat = raw.get("bat") or {}
+    val = (
+        gestalt.get("BatterySerialNumber")
+        or bat.get("BatterySerialNumber")
+        or bat.get("Serial")
+    )
+    if isinstance(val, bytes):
+        val = val.decode("utf-8", "replace")
+    if val:
+        cleaned = re.sub(r"[^A-Za-z0-9]", "", str(val)).strip().upper()
+        if 8 <= len(cleaned) <= 32:
+            return cleaned
+    return None
+
+
+def _battery_manufacturer(raw, serial=None):
+    bat = raw.get("bat") or {}
+    mfg_raw = bat.get("Manufacturer") or bat.get("BatteryManufacturer")
+    if isinstance(mfg_raw, bytes):
+        mfg_raw = mfg_raw.decode("utf-8", "replace")
+    mfg_clean = _text(mfg_raw) if mfg_raw else None
+    if mfg_clean:
+        mfg_clean = str(mfg_clean).strip()[:40]
+
+    known = None
+    if mfg_clean:
+        upper = mfg_clean.upper()
+        for code, name in BATTERY_MANUFACTURERS.items():
+            if upper == code or upper.startswith(code + " ") or f"({code})" in upper:
+                known = f"{name} ({code})" if code not in name.upper() else name
+                break
+        if not known:
+            known = mfg_clean
+
+    serial = serial or _battery_serial(raw)
+    prefix_name = None
+    if serial and len(serial) >= 3:
+        prefix = serial[:3].upper()
+        if prefix in SERIAL_PREFIX_MANUFACTURERS:
+            prefix_name = f"{SERIAL_PREFIX_MANUFACTURERS[prefix]} ({prefix})"
+
+    if known and prefix_name:
+        if known.split()[0].lower() == prefix_name.split()[0].lower():
+            return known
+        return f"{known}, kód: {prefix_name}"
+    return known or prefix_name
+
+
+def _battery_device(raw):
+    bat = raw.get("bat") or {}
+    gestalt = raw.get("gestalt") or {}
+    dev = (
+        bat.get("DeviceName")
+        or bat.get("GasGauge")
+        or gestalt.get("GasGaugeBatteryCapability")
+    )
+    if isinstance(dev, bytes):
+        dev = dev.decode("utf-8", "replace")
+    if dev is not None:
+        cleaned = re.sub(r"[^\x20-\x7e]", "", str(dev)).strip()[:30]
+        return cleaned or None
+    return None
+
+
+def _battery_mfg_date(raw):
+    bat = raw.get("bat") or {}
+    data = bat.get("BatteryData") or {}
+    val = bat.get("ManufactureDate") or data.get("ManufactureDate")
+    if isinstance(val, int) and val > 0:
+        year = 1980 + ((val >> 9) & 0x7F)
+        month = (val >> 5) & 0x0F
+        day = val & 0x1F
+        if 1990 <= year <= 2035 and 1 <= month <= 12 and 1 <= day <= 31:
+            return f"{year:04d}.{month:02d}.{day:02d}"
+    if isinstance(val, bytes):
+        val = val.decode("utf-8", "replace")
+    if isinstance(val, str):
+        val = val.strip()
+        if len(val) == 4 and val.isdigit():
+            return f"20{val[:2]}, {val[2:]}. hét"
+        if re.match(r"^\d{4}[-./]\d{2}[-./]\d{2}$", val):
+            return val
+    return None
+
+
 def battery_section(raw):
     bat = raw.get("bat") or {}
     data = bat.get("BatteryData") or {}
     life = data.get("LifetimeData") or {}
     lvl = raw.get("battery") or {}
     log = raw.get("battery_log") or {}
+    gestalt = raw.get("gestalt") or {}
     design = bat.get("DesignCapacity")
     cycles = bat.get("CycleCount")
     max_raw = bat.get("AppleRawMaxCapacity")
     source = "élő mérés"
     if max_raw is None and log.get("raw") is not None:
         max_raw, source = log["raw"], "rendszernapló"
+
+    bat_serial = _battery_serial(raw)
+    bat_mfg = _battery_manufacturer(raw, bat_serial)
+    bat_gauge = _battery_device(raw)
+    bat_date = _battery_mfg_date(raw)
+    chem = _text(bat.get("Chemistry"))
+    auth = gestalt.get("DeviceSupportsBatteryModuleAuthentication")
 
     rows = [row("Töltöttség", f"{lvl.get('BatteryCurrentCapacity')}% (tölt: {'igen' if lvl.get('BatteryIsCharging') else 'nem'})"
                 if lvl.get("BatteryCurrentCapacity") is not None else None)]
@@ -85,6 +215,17 @@ def battery_section(raw):
         rows.append(row("Valós kapacitás (nyers)", f"{max_raw} mAh = {p}% ({source})", _threshold(p, 85, 75)))
     else:
         rows.append(row("Valós kapacitás (nyers)", None))
+    if bat_mfg:
+        rows.append(row("Akku gyártója", bat_mfg))
+    if bat_serial:
+        rows.append(row("Akku sorozatszáma", bat_serial))
+    if bat_gauge:
+        rows.append(row("Akku vezérlő (Gas Gauge)", bat_gauge))
+    if chem:
+        rows.append(row("Akku kémiája", chem))
+    if auth is not None:
+        auth_str = "támogatott (hardveresen hitelesített)" if auth else "nem támogatott"
+        rows.append(row("Hardveres akku hitelesítés", auth_str))
     for label, value in (("Névleges kapacitás (NCC)", bat.get("NominalChargeCapacity")),
                          ("Gauge max. kapacitás", data.get("MaxCapacity"))):
         if _is_int(value) and design:
@@ -105,6 +246,8 @@ def battery_section(raw):
     mfg = _text(data.get("ManufactureDate"))
     if isinstance(mfg, str) and len(mfg) == 4 and mfg.isdigit():
         rows.append(row("Akku gyártása (kód szerint)", f"20{mfg[:2]}, {mfg[2:]}. hét"))
+    elif bat_date:
+        rows.append(row("Akku gyártási ideje", bat_date))
     if _is_int(bat.get("Temperature")):
         rows.append(row("Hőmérséklet most", f"{bat['Temperature'] / 100:.1f} °C"))
     if _is_int(bat.get("Voltage")):
@@ -115,9 +258,9 @@ def battery_section(raw):
     if adapter.get("Watts"):
         rows.append(row("Töltő", f"{adapter['Watts']} W, {_text(adapter.get('Description')) or ''}".rstrip(", ")))
     if _is_int(life.get("MaximumTemperature")) and _is_int(life.get("MinimumTemperature")):
-        rows.append(row("Élettartam hőmérséklet", f"{life['MinimumTemperature'] / 10:.1f} – {life['MaximumTemperature'] / 10:.1f} °C"))
+        rows.append(row("Élettartam hőmérséklet", f"{life['MinimumTemperature'] / 10:.1f} - {life['MaximumTemperature'] / 10:.1f} °C"))
     if _is_int(life.get("MaximumPackVoltage")):
-        rows.append(row("Élettartam cellafesz.", f"{life.get('MinimumPackVoltage')} – {life['MaximumPackVoltage']} mV"))
+        rows.append(row("Élettartam cellafesz.", f"{life.get('MinimumPackVoltage')} - {life['MaximumPackVoltage']} mV"))
     return {"title": "Akkumulátor és töltés", "rows": rows}
 
 

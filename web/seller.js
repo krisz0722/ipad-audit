@@ -578,6 +578,14 @@ function collect() {
     batteryDefer: !!state.noLog,
     condition: e.condition,
     fileDate: e.fileDate,
+    batteryManufacturer:
+      state.route === "usb" ? clean(e.batteryManufacturer, 40) : "",
+    batterySerial:
+      state.route === "usb" ? clean(e.batterySerial, 30) : "",
+    batteryDeviceName:
+      state.route === "usb" ? clean(e.batteryDeviceName, 30) : "",
+    batteryMfgDate:
+      state.route === "usb" ? clean(e.batteryMfgDate, 30) : "",
     apple: state.apple,
     activationLock: e.activationLock,
     dep: e.dep,
@@ -942,6 +950,10 @@ function applyUsbText(text) {
   state.extra.activationLock = r.activationLock;
   state.extra.modelId = r.modelName ? r.model : "";
   state.extra.hardwarePlatform = r.hardwarePlatform;
+  state.extra.batteryManufacturer = r.batteryManufacturer;
+  state.extra.batterySerial = r.batterySerial;
+  state.extra.batteryDeviceName = r.batteryDeviceName;
+  state.extra.batteryMfgDate = r.batteryMfgDate;
   save();
   var lock =
     r.activationLock === "Enabled"
@@ -971,6 +983,12 @@ function applyUsbText(text) {
       "<dt>Maximális kapacitás</dt><dd>" +
       esc(r.capacity === null ? "nem található" : r.capacity + "%") +
       "</dd>" +
+      (r.batteryManufacturer
+        ? "<dt>Akku gyártója</dt><dd>" + esc(r.batteryManufacturer) + "</dd>"
+        : "") +
+      (r.batterySerial
+        ? "<dt>Akku sorozatszáma</dt><dd>" + esc(r.batterySerial) + "</dd>"
+        : "") +
       "<dt>Aktiválási zár</dt><dd>" +
       esc(lock) +
       "</dd>" +

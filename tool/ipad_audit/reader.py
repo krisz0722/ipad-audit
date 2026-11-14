@@ -7,7 +7,13 @@ import re
 import secrets
 import sys
 
-from ipad_audit.report import MODELS
+from ipad_audit.report import (
+    MODELS,
+    _battery_device,
+    _battery_manufacturer,
+    _battery_mfg_date,
+    _battery_serial,
+)
 
 HEADER = "IPAD-AUDIT-USB 1"
 FOOTER = "END"
@@ -47,6 +53,11 @@ def facts(raw):
     product = _text(info.get("ProductType"), 20)
     serial = re.sub(r"[^A-Za-z0-9]", "", str(info.get("SerialNumber") or ""))[:14] or None
 
+    bat_serial = _battery_serial(raw)
+    bat_mfg = _battery_manufacturer(raw, bat_serial)
+    bat_device = _battery_device(raw)
+    bat_mfg_date = _battery_mfg_date(raw)
+
     return {
         "model": product,
         "model_name": MODELS.get(product),
@@ -59,6 +70,10 @@ def facts(raw):
         "max_capacity": max_capacity,
         "capacity_percent": percent,
         "activation_lock": _lock(info),
+        "battery_manufacturer": bat_mfg,
+        "battery_serial": bat_serial,
+        "battery_device_name": bat_device,
+        "battery_mfg_date": bat_mfg_date,
     }
 
 
@@ -77,6 +92,10 @@ def build_block(raw):
         ("max_capacity", f["max_capacity"]),
         ("capacity_percent", f["capacity_percent"]),
         ("activation_lock", f["activation_lock"]),
+        ("battery_manufacturer", f.get("battery_manufacturer")),
+        ("battery_serial", f.get("battery_serial")),
+        ("battery_device_name", f.get("battery_device_name")),
+        ("battery_mfg_date", f.get("battery_mfg_date")),
     ]
     lines = [HEADER] + ["%s: %s" % (key, value) for key, value in fields if value not in (None, "")] + [FOOTER]
     return "\n".join(lines)
@@ -93,11 +112,16 @@ def summary_lines(raw):
         lines.append("Az eszközöd: " + device)
     if f["cycles"] is not None:
         wear = ("az eredeti kapacitás %s%%-a maradt" % f["capacity_percent"]) if f["capacity_percent"] is not None else "a kapacitás nem olvasható ki"
-        lines.append("Akkumulátor: %s töltési ciklus, %s" % (f["cycles"], wear))
+        bat_info = "Akkumulátor: %s töltési ciklus, %s" % (f["cycles"], wear)
+        if f.get("battery_manufacturer"):
+            bat_info += " (gyártó: %s)" % f["battery_manufacturer"]
+        lines.append(bat_info)
         if f["capacity_percent"] is not None and f["capacity_percent"] < 80:
             lines.append("  Figyelem: 80% alatti kapacitásnál az akku már érezhetően gyengébb, a vevő ezt látni fogja.")
     else:
         lines.append("Akkumulátor: ezen az eszközön nem sikerült kiolvasni.")
+    if f.get("battery_serial"):
+        lines.append("  Akku sorozatszáma: %s" % f["battery_serial"])
     lock = {"on": "BEKAPCSOLVA (ki kell jelentkezni az Apple-fiókból)", "off": "kikapcsolva"}.get(f["activation_lock"], "ezen a rendszeren nem olvasható ki")
     lines.append("Aktiválási zár: " + lock)
     return lines
@@ -125,7 +149,46 @@ async def read_raw(notify):
         pass
     async with DiagnosticsService(lockdown=lockdown) as diag:
         battery = await device._entry(diag, device.ENTRIES["bat"]) or {}
-        raw["bat"] = {key: battery[key] for key in ("CycleCount", "DesignCapacity", "AppleRawMaxCapacity", "NominalChargeCapacity") if key in battery}
+        if hasattr(diag, "get_battery") and not battery:
+            try:
+                battery = await diag.get_battery() or {}
+            except Exception:
+                pass
+        allowed_bat_keys = (
+            "CycleCount",
+            "DesignCapacity",
+            "AppleRawMaxCapacity",
+            "NominalChargeCapacity",
+            "Manufacturer",
+            "BatteryManufacturer",
+            "Serial",
+            "BatterySerialNumber",
+            "DeviceName",
+            "GasGauge",
+            "Chemistry",
+            "ManufactureDate",
+            "BatteryData",
+        )
+        raw["bat"] = {key: battery[key] for key in allowed_bat_keys if key in battery}
+        if hasattr(diag, "mobilegestalt"):
+            try:
+                gestalt = await diag.mobilegestalt(keys=[
+                    "BatterySerialNumber",
+                    "DeviceSupportsBatteryModuleAuthentication",
+                    "GasGaugeBatteryCapability",
+                ])
+                if gestalt:
+                    raw["gestalt"] = {
+                        key: gestalt[key]
+                        for key in (
+                            "BatterySerialNumber",
+                            "DeviceSupportsBatteryModuleAuthentication",
+                            "GasGaugeBatteryCapability",
+                        )
+                        if key in gestalt
+                    }
+            except Exception:
+                pass
     return raw
 
 
@@ -140,16 +203,26 @@ def pause():
 
 def usb_sections(raw):
     values = facts(raw)
-    labels = {
-        "model": "Modellazonosító", "model_name": "Modell", "os": "Rendszerverzió",
-        "serial": "Sorozatszám", "hardware_platform": "Hardverplatform", "storage_gb": "Tárhely (GB)",
-        "cycles": "Töltési ciklusok", "design_capacity": "Tervezett kapacitás (mAh)",
-        "max_capacity": "Maximális kapacitás (mAh)", "capacity_percent": "Kapacitás (%)",
-        "activation_lock": "Aktiválási zár"
-    }
+    labels = [
+        ("model", "Modellazonosító"),
+        ("model_name", "Modell"),
+        ("os", "Rendszerverzió"),
+        ("serial", "Sorozatszám"),
+        ("hardware_platform", "Hardverplatform"),
+        ("storage_gb", "Tárhely (GB)"),
+        ("cycles", "Töltési ciklusok"),
+        ("design_capacity", "Tervezett kapacitás (mAh)"),
+        ("max_capacity", "Maximális kapacitás (mAh)"),
+        ("capacity_percent", "Kapacitás (%)"),
+        ("battery_manufacturer", "Akku gyártója"),
+        ("battery_serial", "Akku sorozatszáma"),
+        ("battery_device_name", "Akku vezérlő (Gas Gauge)"),
+        ("battery_mfg_date", "Akku gyártási ideje"),
+        ("activation_lock", "Aktiválási zár"),
+    ]
     rows = []
-    for key, label in labels.items():
-        value = values[key]
+    for key, label in labels:
+        value = values.get(key)
         if key == "activation_lock":
             value = {"on": "bekapcsolva", "off": "kikapcsolva"}.get(value)
         rows.append({"label": label, "value": str(value) if value is not None else "nem olvasható ki",

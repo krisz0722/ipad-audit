@@ -41,6 +41,10 @@ function applyUsbText(text) {
   state.extra.activationLock = r.activationLock;
   state.extra.modelId = r.modelName ? r.model : "";
   state.extra.hardwarePlatform = r.hardwarePlatform;
+  state.extra.batteryManufacturer = r.batteryManufacturer;
+  state.extra.batterySerial = r.batterySerial;
+  state.extra.batteryDeviceName = r.batteryDeviceName;
+  state.extra.batteryMfgDate = r.batteryMfgDate;
   save();
   var lock =
     r.activationLock === "Enabled"
@@ -70,6 +74,12 @@ function applyUsbText(text) {
       "<dt>Maximális kapacitás</dt><dd>" +
       esc(r.capacity === null ? "nem található" : r.capacity + "%") +
       "</dd>" +
+      (r.batteryManufacturer
+        ? "<dt>Akku gyártója</dt><dd>" + esc(r.batteryManufacturer) + "</dd>"
+        : "") +
+      (r.batterySerial
+        ? "<dt>Akku sorozatszáma</dt><dd>" + esc(r.batterySerial) + "</dd>"
+        : "") +
       "<dt>Aktiválási zár</dt><dd>" +
       esc(lock) +
       "</dd>" +

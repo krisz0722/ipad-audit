@@ -790,6 +790,26 @@
         src.capacity
       )
     ];
+    if (d.batteryManufacturer) {
+      battery.push(
+        row("Akku gyártója", d.batteryManufacturer, "info", "USB-ből")
+      );
+    }
+    if (d.batterySerial) {
+      battery.push(
+        row("Akku sorozatszáma", d.batterySerial, "info", "USB-ből")
+      );
+    }
+    if (d.batteryDeviceName) {
+      battery.push(
+        row("Akku vezérlő (Gas Gauge)", d.batteryDeviceName, "info", "USB-ből")
+      );
+    }
+    if (d.batteryMfgDate) {
+      battery.push(
+        row("Akku gyártási ideje", d.batteryMfgDate, "info", "USB-ből")
+      );
+    }
     if (d.condition)
       battery.push(
         row(
@@ -1048,7 +1068,11 @@
       storage: "",
       cycles: null,
       capacity: null,
-      activationLock: ""
+      activationLock: "",
+      batteryManufacturer: "",
+      batterySerial: "",
+      batteryDeviceName: "",
+      batteryMfgDate: ""
     };
     var start = text.indexOf("IPAD-AUDIT-USB 1");
     if (start < 0) return out;
@@ -1079,6 +1103,10 @@
     if (cap >= 40 && cap <= 110) out.capacity = Math.round(Math.min(cap, 100));
     out.activationLock =
       { on: "Enabled", off: "Disabled" }[f.activation_lock] || "";
+    out.batteryManufacturer = clean(f.battery_manufacturer, 40);
+    out.batterySerial = clean(f.battery_serial, 30);
+    out.batteryDeviceName = clean(f.battery_device_name, 30);
+    out.batteryMfgDate = clean(f.battery_mfg_date, 30);
     out.valid = !!(out.model || out.os || out.cycles !== null || out.serial);
     return out;
   }

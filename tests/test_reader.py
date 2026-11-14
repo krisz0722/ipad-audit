@@ -149,6 +149,77 @@ def test_usb_email_contains_only_whitelisted_facts():
         assert private not in text
 
 
+def test_battery_manufacturer_and_serial_helpers():
+    from ipad_audit.report import _battery_device, _battery_manufacturer, _battery_mfg_date, _battery_serial
+
+    raw_swd = {
+        "bat": {
+            "Manufacturer": "SWD",
+            "Serial": "F8Y93231G40L3P0AR",
+            "DeviceName": "bq27546",
+            "ManufactureDate": 18582,
+        }
+    }
+    assert _battery_serial(raw_swd) == "F8Y93231G40L3P0AR"
+    assert _battery_manufacturer(raw_swd) == "Sunwoda (SWD)"
+    assert _battery_device(raw_swd) == "bq27546"
+    assert _battery_mfg_date(raw_swd) == "2016.04.22"
+
+    raw_prefix = {"bat": {"Serial": "FG691234567890123"}}
+    assert _battery_manufacturer(raw_prefix) == "Simplo (FG6)"
+
+    raw_desay = {"bat": {"Manufacturer": "DSY", "BatterySerialNumber": "D8791234567890123"}}
+    assert _battery_manufacturer(raw_desay) == "Desay (DSY)"
+
+    raw_gestalt = {
+        "gestalt": {
+            "BatterySerialNumber": "DLN91234567890123",
+            "GasGaugeBatteryCapability": "b616",
+        }
+    }
+    assert _battery_serial(raw_gestalt) == "DLN91234567890123"
+    assert _battery_manufacturer(raw_gestalt) == "Amperex (ATL) (DLN)"
+    assert _battery_device(raw_gestalt) == "b616"
+
+
+def test_facts_and_usb_sections_with_battery_details():
+    raw_full = dict(
+        RAW,
+        bat={
+            "CycleCount": 120,
+            "DesignCapacity": 7340,
+            "AppleRawMaxCapacity": 6600,
+            "Manufacturer": "SWD",
+            "Serial": "F8Y93231G40L3P0AR",
+            "DeviceName": "bq27546",
+            "ManufactureDate": 18582,
+        },
+    )
+    f = reader.facts(raw_full)
+    assert f["battery_manufacturer"] == "Sunwoda (SWD)"
+    assert f["battery_serial"] == "F8Y93231G40L3P0AR"
+    assert f["battery_device_name"] == "bq27546"
+    assert f["battery_mfg_date"] == "2016.04.22"
+
+    block = reader.build_block(raw_full)
+    assert "battery_manufacturer: Sunwoda (SWD)" in block
+    assert "battery_serial: F8Y93231G40L3P0AR" in block
+    assert "battery_device_name: bq27546" in block
+    assert "battery_mfg_date: 2016.04.22" in block
+
+    lines = reader.summary_lines(raw_full)
+    text = "\n".join(lines)
+    assert "Sunwoda (SWD)" in text
+    assert "F8Y93231G40L3P0AR" in text
+
+    sections = reader.usb_sections(raw_full)
+    rows = {r["label"]: r["value"] for r in sections[0]["rows"]}
+    assert rows["Akku gyártója"] == "Sunwoda (SWD)"
+    assert rows["Akku sorozatszáma"] == "F8Y93231G40L3P0AR"
+    assert rows["Akku vezérlő (Gas Gauge)"] == "bq27546"
+    assert rows["Akku gyártási ideje"] == "2016.04.22"
+
+
 @pytest.mark.parametrize("code", ["123456789", "DEMOFAKE1234"])
 @pytest.mark.parametrize("consent", ["igen", "", "  "])
 def test_main_prints_device_url_without_opening_computer_browser(monkeypatch, capsys, code, consent, mock_audit_backend):
