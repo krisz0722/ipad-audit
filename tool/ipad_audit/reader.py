@@ -282,7 +282,21 @@ def main(argv=None):
     parser.add_argument("--dev", action="store_true", help="A helyi dev szerver hálózati címét használja.")
     parser.add_argument("--web-url", default="", help="Az iPadről elérhető webes alapcím, meghívókód nélkül.")
     parser.add_argument("--monitor-timeout", type=float, default=1800, help="A webes teszt követésének időkorlátja másodpercben.")
+    parser.add_argument("--battery-only", action="store_true", help="Csak az akkumulátor terhelésteszt futtatása (backend és meghívókód nélkül).")
+    parser.add_argument("--minutes", type=float, default=None, help="Akkumulátor terhelésteszt ideje percben (--battery-only esetén).")
+    parser.add_argument("--interval", type=int, default=1, help="Mintavételi idő másodpercben (--battery-only esetén).")
     args = parser.parse_args(argv)
+    if args.battery_only:
+        print("-" * 64, file=sys.stderr)
+        print("  iPad Audit - Önálló Akkumulátor Terhelésteszt", file=sys.stderr)
+        print("-" * 64, file=sys.stderr)
+        battery_test.run_standalone(
+            minutes=args.minutes,
+            interval=args.interval,
+            notify=lambda msg: print(msg, file=sys.stderr),
+            ask=input,
+        )
+        return 0
     try:
         web_url = reader_web.seller_base_url(dev=args.dev, base_url=args.web_url)
     except ValueError as error:

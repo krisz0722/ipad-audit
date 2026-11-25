@@ -97,6 +97,12 @@ Az USB-reader indítása: a meghívókód, a beleegyezés és az opcionális ela
 npm run usb
 ```
 
+Csak az akkumulátor terhelésteszt önálló futtatása (backend és meghívókód nélkül):
+
+```bash
+npm run battery
+```
+
 A végponttól végpontig tartó integrációs teszt mock backenddel fut, valódi email nélkül. A projekt Python-környezete és Google Chrome szükséges hozzá:
 
 ```bash

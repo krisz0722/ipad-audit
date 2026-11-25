@@ -465,3 +465,90 @@ def run_interactive(backend, code, sid, notify, ask=input, sampler=None, clock=t
             wait=wait,
         )
     )
+
+
+def run_standalone(
+    minutes=None,
+    interval=1,
+    output_file=None,
+    notify=print,
+    ask=input,
+    sampler=None,
+    clock=time.monotonic,
+    wait=asyncio.sleep,
+):
+    """Önálló akkumulátor-terhelésteszt futtatása backend és meghívókód nélkül."""
+    if minutes is None:
+        cfg = ask_config(ask=ask, notify=notify)
+        if not cfg:
+            notify("Az akkumulátor-terhelésteszt megszakítva.")
+            return None
+        minutes, interval = cfg
+    else:
+        notify("\n--- Akkumulátor-terhelésteszt ---")
+        notify(
+            "\n>>> 1. NYISS MEG EGY VIDEÓT AZ IPADEN (LEHETŐLEG YOUTUBE 1080p 60fps, HANGGAL), <<<\n"
+            ">>>    ÁLLÍTSD MAGASRA A FÉNYERŐT, ÉS INDÍTSD EL A LEJÁTSZÁST! <<<\n"
+            ">>> 2. A MÉRÉS ALATT NYOMD MEG A HANGERŐ FEL, HANGERŐ LE ÉS HOME GOMBOKAT, <<<\n"
+            ">>>    ÉS DÖNTSD MEG AZ IPADET (A TERMINÁL ÉLŐBEN KIÍRJA A VÁLASZOKAT)! <<<"
+        )
+        if ask is not None:
+            try:
+                ready = ask("Ha a videó elindult, nyomj Entert a méréshez (0: megszakítás)... ").strip().lower()
+                if ready in ("0", "n", "nem", "no", "kihagy", "skip"):
+                    notify("A teszt megszakítva.")
+                    return None
+            except (EOFError, StopIteration):
+                pass
+
+    all_samples = []
+
+    def on_batch(batch, section):
+        all_samples.extend(batch)
+        return True
+
+    section = asyncio.run(
+        collect_samples(
+            minutes,
+            interval,
+            notify,
+            on_batch,
+            sampler=sampler,
+            clock=clock,
+            wait=wait,
+        )
+    )
+
+    if output_file and all_samples:
+        import json
+        try:
+            with open(output_file, "w", encoding="utf-8") as f:
+                json.dump({"section": section, "samples": all_samples}, f, indent=2, ensure_ascii=False)
+            notify("Eredmények elmentve: " + str(output_file))
+        except Exception as err:
+            notify("Mentési hiba: " + str(err))
+
+    return section
+
+
+def main(argv=None):
+    import argparse
+    parser = argparse.ArgumentParser(description="iPad önálló akkumulátor terhelésteszt")
+    parser.add_argument("--minutes", "-m", type=float, default=None, help="Teszt időtartama percben")
+    parser.add_argument("--interval", "-i", type=int, default=1, help="Mintavételi intervallum másodpercben")
+    parser.add_argument("--output", "-o", default=None, help="Eredmények mentése JSON fájlba")
+    parser.add_argument("--yes", "-y", action="store_true", help="Interaktív kérdések kihagyása")
+    args = parser.parse_args(argv)
+
+    ask_fn = (lambda prompt="": "") if args.yes else input
+    run_standalone(
+        minutes=args.minutes,
+        interval=args.interval,
+        output_file=args.output,
+        notify=print,
+        ask=ask_fn,
+    )
+
+
+if __name__ == "__main__":
+    main()

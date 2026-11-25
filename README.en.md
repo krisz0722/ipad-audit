@@ -97,6 +97,12 @@ Start the USB reader: after the invitation code, consent, and optional seller em
 npm run usb
 ```
 
+Run only the battery stress test standalone (without backend or invite code):
+
+```bash
+npm run battery
+```
+
 The end-to-end integration test uses a mock backend and sends no real email. It requires the project Python environment and Google Chrome:
 
 ```bash

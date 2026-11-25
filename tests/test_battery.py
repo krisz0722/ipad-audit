@@ -206,3 +206,35 @@ def test_collect_samples_reports_usb_buttons_audio_and_hw_diagnostics():
     assert "-52 – -52 dBm" in rows["Wi-Fi jelerősség (USB)"]
     assert "SIM behelyezve, kész" in rows["Mobilhálózat és SIM (USB)"]
     assert "NAND: Ready" in rows["Belső vezérlők (USB)"]
+
+
+def test_run_standalone_collects_samples_without_backend():
+    messages = []
+    now = [0.0]
+
+    async def wait(seconds):
+        now[0] += seconds
+
+    async def sampler(sec):
+        return {
+            "sec": sec,
+            "level": 80 - int(sec),
+            "voltageMv": 4050,
+            "tempC": 35.0,
+            "cycles": 100,
+            "charging": False,
+            "currentMa": -450,
+        }
+
+    section = battery_test.run_standalone(
+        minutes=0.05,
+        interval=1,
+        notify=messages.append,
+        ask=lambda prompt: "",
+        sampler=sampler,
+        clock=lambda: now[0],
+        wait=wait,
+    )
+    assert section is not None
+    assert section["title"] == "Akkumulátor terhelésteszt"
+    assert any("AKKUMULÁTOR TERHELÉSTESZT ÖSSZEFOGLALÓ" in msg for msg in messages)
