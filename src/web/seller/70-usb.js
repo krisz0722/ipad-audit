@@ -55,8 +55,7 @@ SCREENS.usb_get = function () {
   var info =
     '<p class="lead">Az iPad és iPhone akkumulátorának pontos adatait a böngésző nem éri el, ezért az első lépést a számítógépeden, USB-kábellel végezzük.</p>' +
     '<div class="note"><b>Biztonságos és nyílt forráskódú:</b> a program csak olvas, semmit nem módosít az eszközön, és személyes adatokhoz nem fér hozzá. A kód nyilvánosan ellenőrizhető a ' +
-    '<a href="https://github.com/krisz0722/ipad-audit" target="_blank" rel="noopener">GitHubon</a> és ' +
-    '<a href="https://gitlab.com/krisz0722/ipad-audit" target="_blank" rel="noopener">GitLaben</a>.</div>';
+    '<a href="https://github.com/krisz0722/ipad-audit" target="_blank" rel="noopener">GitHubon</a>.</div>';
   show(
     top() +
       progress(2) +

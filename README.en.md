@@ -75,7 +75,7 @@ All unit tests (the readers, the backend, the documentation, and a guard that fo
 npm test
 ```
 
-GitLab and GitHub both run it after every push, and GitLab Pages only updates after a green test.
+GitHub Actions runs it together with the Python tests after every push, and the seller page only updates after green tests.
 
 Tests for the in-browser readers:
 
@@ -138,7 +138,7 @@ Dependencies of the Python part: [requirements.txt](requirements.txt). Tests: [t
 1. Create a Google Sheet, open Extensions > Apps Script, and paste the contents of [backend/Code.gs](backend/Code.gs) and [backend/appsscript.json](backend/appsscript.json).
 2. Deploy it as a web app (execute as: you, access: anyone). Put the resulting `/exec` address into [web/config.js](web/config.js) and [tool/ipad_audit/config.py](tool/ipad_audit/config.py).
 3. The "New invite" item of the sheet's "iPad audit" menu issues a code valid for 72 hours that allows one USB report and one web test report, and a ready message with the full link (the code is in it, so the seller does not have to type anything). The link also goes into the "Link" column of the sheet. The link is built from SITE_URL at the top of [backend/Code.gs](backend/Code.gs), change it to your own address.
-4. [.gitlab-ci.yml](.gitlab-ci.yml) publishes the `web/` folder to GitLab Pages.
+4. [.github/workflows/test.yml](.github/workflows/test.yml) publishes the `web/` folder to GitHub Pages after green tests. On the repository's Settings > Pages page, set Source to GitHub Actions; the custom domain is set there too.
 
 After backend changes, publish a new deployment version in Apps Script. Editing the local file or saving it in the editor does not update the running web app. Use Deploy > Manage deployments > Edit > New version to update the existing deployment, preserving its endpoint address and allowing a rollback to the previous version. The two-report flow requires the new report action; the previous deployment returns an unknown action error.
 
@@ -154,7 +154,7 @@ The `/exec` address is not a secret. Protection comes from the invite code and t
 
 ## Reporting a security problem
 
-If you find a bug or a privacy problem, open a confidential issue in the GitLab repository.
+If you find a bug or a privacy problem, report it privately on the GitHub repository's Security tab (Report a vulnerability).
 
 ## License
 

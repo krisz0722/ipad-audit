@@ -75,7 +75,7 @@ Az összes egységteszt (kiolvasók, backend, dokumentáció, és egy védőhál
 npm test
 ```
 
-Ezt a GitLab és a GitHub is lefuttatja minden push után, a GitLab Pages csak zöld teszt után frissül.
+Ezt a GitHub Actions a Python tesztekkel együtt lefuttatja minden push után, és az eladói oldal csak zöld tesztek után frissül.
 
 A böngészős kiolvasók tesztje:
 
@@ -138,7 +138,7 @@ A Python rész függőségei: [requirements.txt](requirements.txt). A tesztek: [
 1. Hozz létre egy Google Táblát, nyisd meg a Bővítmények > Apps Script menüt, és másold be a [backend/Code.gs](backend/Code.gs) és a [backend/appsscript.json](backend/appsscript.json) tartalmát.
 2. Telepítsd webalkalmazásként (futtatás: te, hozzáférés: bárki). A kapott `/exec` címet írd be a [web/config.js](web/config.js) és a [tool/ipad_audit/config.py](tool/ipad_audit/config.py) fájlba.
 3. A Tábla "iPad audit" menüjének "Új meghívó" pontja 72 órás kódot ad, amely egy USB-riportot és egy webes tesztriportot enged, valamint egy kész üzenetet a teljes linkkel (a kód benne van, az eladónak nem kell gépelnie). A link a Tábla "Link" oszlopába is bekerül. A link alapja a [backend/Code.gs](backend/Code.gs) elején lévő SITE_URL, ezt írd át a saját címedre.
-4. A [.gitlab-ci.yml](.gitlab-ci.yml) a `web/` mappát GitLab Pagesre publikálja.
+4. A [.github/workflows/test.yml](.github/workflows/test.yml) zöld tesztek után a `web/` mappát GitHub Pagesre publikálja. A repó Settings > Pages oldalán a Source legyen GitHub Actions, a saját domain is ott állítható be.
 
 Backend-módosítás után az Apps Scriptben új deployment-verziót kell publikálni. A helyi fájl átírása vagy az editorban történő mentés nem frissíti a működő web appot. A Deploy > Manage deployments > Edit > New version útvonalon frissítsd a meglévő deploymentet, hogy az endpoint címe megmaradjon, és a korábbi verzió visszaállítható legyen. A két-riportos flow az új report műveletet igényli; a régi deployment erre ismeretlen műveletet válaszol.
 
@@ -154,7 +154,7 @@ A `/exec` cím nem titok, a védelmet a meghívókód és a napi levélkorlát a
 
 ## Biztonsági bejelentés
 
-Ha hibát vagy adatvédelmi problémát találsz, nyiss egy bizalmas (confidential) issue-t a GitLab repóban.
+Ha hibát vagy adatvédelmi problémát találsz, jelentsd privátban a GitHub repó Security fülén (Report a vulnerability).
 
 ## Licenc
 

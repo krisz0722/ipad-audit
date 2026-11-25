@@ -71,7 +71,7 @@ SCREENS.welcome = function () {
       '<div class="note"><b>Biztonság és adatvédelem:</b><ul class="marks yes">' +
       "<li><b>Csak technikai adatokat mér:</b> akkumulátor ciklusszám és kapacitás, hardver állapot.</li>" +
       "<li><b>Személyes adathoz soha nem fér hozzá:</b> jelszavak, fotók, üzenetek, Apple-fiók érintetlenek maradnak.</li>" +
-      '<li><b>Nyílt forráskódú:</b> a program és a weboldal kódja nyilvánosan ellenőrizhető a <a href="https://github.com/krisz0722/ipad-audit" target="_blank" rel="noopener">GitHubon</a> és <a href="https://gitlab.com/krisz0722/ipad-audit" target="_blank" rel="noopener">GitLaben</a>.</li>' +
+      '<li><b>Nyílt forráskódú:</b> a program és a weboldal kódja nyilvánosan ellenőrizhető a <a href="https://github.com/krisz0722/ipad-audit" target="_blank" rel="noopener">GitHubon</a>.</li>' +
       "</ul></div>" +
       example +
       (CODE && !DEMO
