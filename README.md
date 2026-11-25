@@ -103,6 +103,12 @@ Csak az akkumulátor terhelésteszt önálló futtatása (backend és meghívók
 npm run battery
 ```
 
+Könnyített akkumulátor- és hőmérséklet-figyelés: csak az akkumulátor adatait olvassa, gomb-, syslog- és hangfigyelés nélkül, így maga a mérés nem terheli az iPadet. Backend nem kell hozzá, Ctrl+C-ig vagy a megadott ideig fut:
+
+```bash
+npm run monitor
+```
+
 A végponttól végpontig tartó integrációs teszt mock backenddel fut, valódi email nélkül. A projekt Python-környezete és Google Chrome szükséges hozzá:
 
 ```bash

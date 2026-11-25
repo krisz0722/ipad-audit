@@ -103,6 +103,12 @@ Run only the battery stress test standalone (without backend or invite code):
 npm run battery
 ```
 
+Lightweight battery and temperature monitor: it reads only the battery values, without button, syslog or audio monitoring, so the measurement itself does not load the iPad. It needs no backend and runs until Ctrl+C or for the given time:
+
+```bash
+npm run monitor
+```
+
 The end-to-end integration test uses a mock backend and sends no real email. It requires the project Python environment and Google Chrome:
 
 ```bash

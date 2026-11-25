@@ -6,6 +6,7 @@
     "start": "bash scripts/serve.sh",
     "usb": "PYTHONPATH=tool .venv/bin/python -m ipad_audit.reader --dev",
     "battery": "bash scripts/battery-stress-test.sh",
+    "monitor": "bash scripts/battery-monitor.sh",
     "audit": "PYTHONPATH=tool .venv/bin/python -m ipad_audit.main",
     "test": "node --test tests/seller_parse.test.js tests/example.test.js tests/docs.test.js tests/backend.test.js tests/audit_web.test.js tests/es5.test.js tests/build.test.js",
     "test:integration": "node --test tests/reader_web_browser.test.js tests/two_reports_browser.test.js",
